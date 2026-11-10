@@ -1,6 +1,6 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { z } from 'zod'
-import { AUDIO_BUSES, EcammClient, resolveItem, summarizeInfo, yes, type Item } from './client.js'
+import { AUDIO_BUSES, EcammClient, preflight, resolveItem, scalar, summarizeInfo, yes, type Item } from './client.js'
 import { EcammError } from './http.js'
 
 type Content = { type: 'text'; text: string } | { type: 'image'; data: string; mimeType: string }
@@ -81,6 +81,35 @@ export function registerTools(server: McpServer, client: EcammClient, opts: { re
   )
 
   server.registerTool(
+    'ecamm_preflight',
+    {
+      description:
+        'Pre-show checklist. One read-only call that reports whether Ecamm is ready to go live and flags problems: already on air, main output or mic muted, mic at 0, no destination, Preview Mode left on. Run it before going live or when the user asks "am I ready?"',
+      inputSchema: {},
+      annotations: ann('read', 'Pre-show check'),
+    },
+    wrap('read', async () => {
+      const info = await client.info(true)
+      const [scenes, destinations, overlays, mode] = await Promise.all([
+        client.scenes().catch(() => [] as Item[]),
+        client.channels().catch(() => [] as Item[]),
+        client.overlays().catch(() => [] as Item[]),
+        client.get('getCurrentMode').catch(() => undefined),
+      ])
+      const scene = scenes.find((s) => s.id === String(info.CurrentScene ?? ''))
+      return text(
+        preflight({
+          info,
+          sceneTitle: scene ? label(scene) : undefined,
+          sourceMode: scalar(mode) || undefined,
+          destinations,
+          overlays,
+        }),
+      )
+    }),
+  )
+
+  server.registerTool(
     'ecamm_discover',
     {
       description:
@@ -140,7 +169,7 @@ export function registerTools(server: McpServer, client: EcammClient, opts: { re
   server.registerTool(
     'ecamm_thumbnail',
     {
-      description: "Ecamm's last thumbnail (JPG) of a scene, overlay, or video. Scene/overlay by name or id; video by file path.",
+      description: "Ecamm's last thumbnail image of a scene, overlay, or video. Scene/overlay by name or id; video by file path.",
       inputSchema: { kind: z.enum(['scene', 'overlay', 'video']), ref: z.string() },
       annotations: ann('read', 'Get thumbnail'),
     },
@@ -149,9 +178,9 @@ export function registerTools(server: McpServer, client: EcammClient, opts: { re
       if (kind === 'scene') id = resolveItem(await client.scenes(), ref, 'scene').id
       if (kind === 'overlay') id = resolveItem(await client.overlays(), ref, 'overlay').id
       const ep = ({ scene: 'getSceneImage', overlay: 'getOverlayImage', video: 'getVideoImage' } as const)[kind]
-      const b64 = await client.image(ep, id)
-      if (!b64) return text(`No thumbnail available for ${kind} ${ref}`)
-      return { content: [{ type: 'image', data: b64, mimeType: 'image/jpeg' }] }
+      const img = await client.image(ep, id)
+      if (!img) return text(`No thumbnail available for ${kind} ${ref}`)
+      return { content: [{ type: 'image', data: img.data, mimeType: img.mimeType }] }
     }),
   )
 
@@ -239,8 +268,7 @@ export function registerTools(server: McpServer, client: EcammClient, opts: { re
     'ecamm_set_source_mode',
     { description: 'Switch source mode: camera, screen share, or video playback.', inputSchema: { mode: z.enum(['cam', 'screen', 'video']) }, annotations: ann('show', 'Set source mode') },
     wrap('show', async ({ mode }: { mode: string }) => {
-      await client.set('setMode', { mode })
-      return text({ mode: await client.get('getCurrentMode') })
+      return text(await client.setSourceMode(mode))
     }),
   )
 

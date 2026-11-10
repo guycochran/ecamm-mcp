@@ -48,7 +48,18 @@ describe('ecamm-mcp end to end', () => {
     const h = state.log[0].headers
     expect(h['ecammlive-uuid']).toMatch(/[0-9A-F-]{36}/)
     expect(h['ecammlive-clientname']).toBe('Claude (ecamm-mcp)')
-    expect(h['user-agent']).toBe('Claude (ecamm-mcp)/0.1.1')
+    expect(h['user-agent']).toMatch(/^Claude \(ecamm-mcp\)\/\d+\.\d+\.\d+$/)
+  })
+
+  it('preflight passes a healthy setup and flags a muted mic', async () => {
+    let r = await call('ecamm_preflight')
+    expect(r.json.ready).toBe(true)
+    expect(r.json.checks.find((c: { check: string }) => c.check === 'Destinations').detail).toContain('OHG YouTube')
+    state.mute.mic = true
+    r = await call('ecamm_preflight')
+    expect(r.json.ready).toBe(false)
+    expect(r.json.summary).toContain('Mic')
+    state.mute.mic = false
   })
 
   it('flattens scene groups and resolves by partial name', async () => {
@@ -110,6 +121,12 @@ describe('ecamm-mcp end to end', () => {
   it('returns thumbnails as images', async () => {
     const r = await call('ecamm_thumbnail', { kind: 'scene', ref: 'Me (full)' })
     expect(r.raw.content[0]).toMatchObject({ type: 'image', mimeType: 'image/jpeg' })
+    expect(r.raw.content[0].data).toMatch(/^[A-Za-z0-9+/]+={0,2}$/)
+  })
+
+  it('waits for the source mode to land before reporting it', async () => {
+    const r = await call('ecamm_set_source_mode', { mode: 'screen' })
+    expect(r.json).toEqual({ mode: 'screen', confirmed: true })
   })
 
   it('zoom end_for_all needs confirm', async () => {

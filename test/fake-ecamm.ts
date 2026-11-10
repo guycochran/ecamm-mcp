@@ -6,6 +6,7 @@ import { createServer, type IncomingMessage, type Server } from 'node:http'
  * toggle-only commands, a ~400 ms scene switch, and the Not Found -> Pending -> Allowed flow.
  */
 export interface FakeState {
+  mode?: string
   permission: 'Not Found' | 'Pending' | 'Allowed' | 'Denied'
   autoApprove: boolean
   scene: string
@@ -98,14 +99,15 @@ export function startFake(): Promise<{ server: Server; port: number; state: Fake
       case 'setMute': state.mute[bus] = !state.mute[bus]; return done()
       case 'getVolume': return json([String(state.volume[bus] ?? 'N/A')])
       case 'setVolume': state.volume[bus] = Number(q.volume); return done()
-      case 'getCurrentMode': return json(['cam'])
+      case 'getCurrentMode': return json([state.mode ?? 'cam'])
+      case 'setMode': setTimeout(() => { state.mode = q.mode }, 250); return done()
       case 'getChannels': return json({ items: [{ title: 'OHG YouTube', UUID: 'CH-YT' }] })
       case 'getProfileList': return json({ items: [{ title: 'Default Show', UUID: 'P-1' }] })
       case 'getVideoList': return json({ items: [{ title: '-No recent items-', UUID: '' }] })
       case 'setClickButton': state.live = !state.live; return done()
       case 'setComment': state.comments.push(q.text); return done()
       case 'setMarker': state.markers.push(q.text ?? ''); return done()
-      case 'getSceneImage': return json({ icon: Buffer.from('fakejpg').toString('base64') })
+      case 'getSceneImage': return json({ icon: 'data:image/jpeg;base64,' + Buffer.from([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3, 4, 5, 6, 7]).toString('base64').replace(/(.{4})/g, '$1\r\n') })
       default:
         if (path.startsWith('set')) return done()
         res.writeHead(404); return res.end('unknown')
