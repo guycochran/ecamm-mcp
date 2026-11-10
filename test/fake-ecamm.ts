@@ -1,0 +1,120 @@
+import { createServer, type IncomingMessage, type Server } from 'node:http'
+
+/**
+ * Minimal stand-in for Ecamm Live's Remote API, shaped like the real responses captured in
+ * the Companion module fixtures: scalars wrapped in arrays, lists in {items}, "Done" for sets,
+ * toggle-only commands, a ~400 ms scene switch, and the Not Found -> Pending -> Allowed flow.
+ */
+export interface FakeState {
+  permission: 'Not Found' | 'Pending' | 'Allowed' | 'Denied'
+  autoApprove: boolean
+  scene: string
+  mute: Record<string, boolean>
+  volume: Record<string, number>
+  overlays: Record<string, Record<string, { title: string; visible: boolean }>>
+  live: boolean
+  log: { path: string; query: Record<string, string>; headers: IncomingMessage['headers'] }[]
+  comments: string[]
+  markers: string[]
+}
+
+const SCENES = [
+  { title: 'Me (full)', UUID: 'S-ME', Children: [], Locked: false },
+  {
+    title: 'Guests', UUID: 'G-1', Group: true,
+    Children: [
+      { title: 'Me + Guest Half', UUID: 'S-HALF', Children: [] },
+      { title: 'Speaker Stage', UUID: 'S-STAGE', Children: [] },
+    ],
+  },
+  { title: 'Me w/comment', UUID: 'S-COMMENT', Children: [] },
+]
+
+export function startFake(): Promise<{ server: Server; port: number; state: FakeState }> {
+  const state: FakeState = {
+    permission: 'Not Found',
+    autoApprove: true,
+    scene: 'S-ME',
+    mute: { main: false, mic: false, soundeffects: false },
+    volume: { mic: 100, soundeffects: 59 },
+    overlays: {
+      'S-ME': { 'O-LT': { title: 'Lower Third Guy', visible: false }, 'O-LOGO': { title: 'OHG Logo', visible: true } },
+      'S-HALF': { 'O-LT2': { title: 'Lower Third Guest', visible: false } },
+    },
+    live: false,
+    log: [],
+    comments: [],
+    markers: [],
+  }
+  let pendingScene: string | undefined
+
+  const server = createServer((req, res) => {
+    const url = new URL(req.url ?? '/', 'http://x')
+    const path = url.pathname.slice(1)
+    const q = Object.fromEntries(url.searchParams)
+    state.log.push({ path, query: q, headers: req.headers })
+    const json = (v: unknown) => {
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify(v))
+    }
+    const done = () => json(['Done'])
+
+    if (!req.headers['ecammlive-uuid'] || !req.headers['ecammlive-clientname']) {
+      res.writeHead(400); return res.end('missing headers')
+    }
+    if (path === 'getConnectionStatus') return json([state.permission])
+    if (state.permission === 'Not Found') {
+      state.permission = state.autoApprove ? 'Allowed' : 'Pending'
+      return json({}) // unapproved getInfo answers {}
+    }
+    if (state.permission !== 'Allowed') return json({})
+
+    const bus = q.bus ?? 'main'
+    const ov = () => state.overlays[state.scene] ?? {}
+    switch (path) {
+      case 'getInfo':
+        return json({
+          ButtonLabel: state.live ? 'End Broadcast' : 'Go Live',
+          PauseButtonLabel: 'None',
+          CurrentScene: state.scene,
+          Viewers: state.live ? '12' : '0',
+          PreviewMode: 'no', HidingUI: 'no', LiveDemo: 'no',
+          Mute: state.mute.main ? 'yes' : 'no',
+          MUTE_MIC: state.mute.mic ? 'yes' : 'no',
+          VOLUME_MIC: String(state.volume.mic),
+          MUTE_SOUNDEFFECTS: state.mute.soundeffects ? 'yes' : 'no',
+          VOLUME_SOUNDEFFECTS: String(state.volume.soundeffects),
+        })
+      case 'getSceneList': return json({ items: SCENES })
+      case 'getCurrentScene': return json([state.scene])
+      case 'setScene':
+        pendingScene = q.id
+        setTimeout(() => { if (pendingScene) state.scene = pendingScene }, 400)
+        return done()
+      case 'getOverlayList':
+        return json({ items: Object.entries(ov()).map(([UUID, o]) => ({ UUID, title: o.title, Visible: o.visible })) })
+      case 'setOverlay': { const o = ov()[q.id]; if (o) o.visible = !o.visible; return done() }
+      case 'getMute': return json([state.mute[bus] ? 'yes' : 'no'])
+      case 'setMute': state.mute[bus] = !state.mute[bus]; return done()
+      case 'getVolume': return json([String(state.volume[bus] ?? 'N/A')])
+      case 'setVolume': state.volume[bus] = Number(q.volume); return done()
+      case 'getCurrentMode': return json(['cam'])
+      case 'getChannels': return json({ items: [{ title: 'OHG YouTube', UUID: 'CH-YT' }] })
+      case 'getProfileList': return json({ items: [{ title: 'Default Show', UUID: 'P-1' }] })
+      case 'getVideoList': return json({ items: [{ title: '-No recent items-', UUID: '' }] })
+      case 'setClickButton': state.live = !state.live; return done()
+      case 'setComment': state.comments.push(q.text); return done()
+      case 'setMarker': state.markers.push(q.text ?? ''); return done()
+      case 'getSceneImage': return json({ icon: Buffer.from('fakejpg').toString('base64') })
+      default:
+        if (path.startsWith('set')) return done()
+        res.writeHead(404); return res.end('unknown')
+    }
+  })
+  return new Promise((resolve) =>
+    server.listen(0, '127.0.0.1', () => {
+      const addr = server.address()
+      resolve({ server, port: typeof addr === 'object' && addr ? addr.port : 0, state })
+    }),
+  )
+}
