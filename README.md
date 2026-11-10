@@ -1,42 +1,70 @@
 # ecamm-mcp
 
-**Run Ecamm Live by talking to it.**
+Run **Ecamm Live** by talking to Claude.
 
-ecamm-mcp connects Claude (or any MCP client) to Ecamm Live on your Mac. Type or say what you want and it happens: switch scenes, show an overlay, mute a mic, fire a sound effect, drop a marker, go live.
+"Switch to my guest scene." "Mute the mic." "Show the lower third." "Drop a marker called Q&A." "What's my status?"
 
-It uses Ecamm's own local Remote API, the same one Stream Deck and Bitfocus Companion use. Nothing leaves your Mac and nothing is installed inside Ecamm.
+It uses Ecamm's own Remote Control feature, the same one Stream Deck and Companion use, so there is nothing to change in your Ecamm setup. It runs on your Mac and talks to Ecamm Live locally.
 
-## What you can say
+Community project. Not made by or affiliated with Ecamm Network.
 
-**Before the show**
-- "What's Ecamm doing right now?"
-- "List my scenes and cameras."
-- "Am I ready to go live?" (runs the pre-show check below)
-- "Is my mic muted? What are my audio levels?"
+## Install
 
-**During the show**
-- "Switch to the interview scene."
-- "Show the lower third." / "Hide it."
-- "Mute my mic." / "Bring the music down to 30."
-- "Play the applause."
-- "Drop a marker called Q&A starts here."
-- "Put the latest viewer comment on screen."
-- "Switch the camera to the PTZ."
+You need a Mac with Ecamm Live and the [Claude desktop app](https://claude.ai/download). Pick one of the two ways below. Not both, or Claude will see everything twice.
 
-**The big buttons (always ask first)**
-- "Go live on YouTube with the title Friday Q&A."
-- "End the broadcast."
-- "Post a comment in chat: back in five minutes."
+### Option 1: no Terminal
 
-**Ecamm for Zoom**
-- "Open the participants panel."
-- "Spotlight me." / "Switch to gallery view."
+1. Download **[ecamm-mcp.mcpb](https://github.com/guycochran/ecamm-mcp/releases/latest/download/ecamm-mcp.mcpb)**.
+2. Double-click it. Claude opens. Click **Install**.
+3. Open Ecamm Live, then ask Claude: **"What's my Ecamm status?"**
+4. Ecamm Live asks for permission. Click **Allow**. Done.
 
-You use your own scene, overlay and camera names. Partial names work if they're unique. If two things match, it shows you both instead of guessing.
+### Option 2: one line in Terminal
+
+Open Terminal (press Cmd+Space, type `Terminal`, press Return), paste this, press Return:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/guycochran/ecamm-mcp/main/install.sh | bash
+```
+
+That one line does everything:
+
+1. Uses the Node.js you already have. If you have none, it downloads a private copy into `~/.ecamm-mcp`. No sudo, nothing installed system-wide.
+2. Downloads the server into `~/.ecamm-mcp`.
+3. Adds Ecamm to Claude desktop. Your existing Claude config is backed up first and nothing else in it is touched.
+4. Opens Ecamm Live if it's closed and gets it to ask for permission. Click **Allow**.
+
+Then quit Claude completely (Cmd+Q), open it again, and ask: **"What's my Ecamm status?"**
+
+Run the same line again any time to update.
+
+## The one click that matters
+
+The first time Claude talks to Ecamm Live, Ecamm shows this. Click **Allow**. You only do it once per Mac.
+
+<img src="docs/allow-dialog.png" width="340" alt="Ecamm Live dialog: Claude (ecamm-mcp) Wants To Control Ecamm, with Deny and Allow buttons">
+
+Fastest way to get to this dialog: have Ecamm Live open, then either run the Terminal line above (it triggers the dialog and waits for you) or ask Claude "What's my Ecamm status?".
+
+No dialog, or you clicked Deny by accident? In Ecamm Live go to **Settings > Remote Control** and tick **Claude (ecamm-mcp)**.
+
+## Things to try
+
+- "Am I ready to go live?"
+- "What scenes do I have?"
+- "Switch to Me + Guest."
+- "Hide the logo overlay."
+- "Mute the mic." / "Set sound effects to 60."
+- "Play the applause sound."
+- "Drop a marker: sponsor read starts."
+- "Show me a thumbnail of the Interview scene."
+- "Go live on YouTube with the title Office Hours." (Claude will show you what it's about to do and ask first.)
+
+Scenes, overlays, cameras, sounds and destinations all work by name. Part of a name is fine if it's unique. If two things match, it asks instead of guessing.
 
 ## The pre-show check
 
-Ask "am I ready to go live?" and you get one answer, not a wall of settings. It flags the things viewers would notice:
+Ask "am I ready to go live?" and you get one answer instead of a wall of settings. It flags what viewers would notice:
 
 - Main output or mic muted, or mic at zero
 - No streaming destination set up
@@ -47,116 +75,134 @@ It also tells you which scene you'll start on and which overlays are showing. It
 
 ## It won't take you live by accident
 
-Every tool sits in one of three tiers.
-
-| Tier | What it covers | Behavior |
+| Tier | What | Behavior |
 | --- | --- | --- |
-| **Read** | Pre-show check, status, scenes, overlays, cameras, sounds, profiles, destinations, thumbnails | Never changes anything |
-| **Show** | Scenes, overlays, mutes, volumes, camera, source mode, video, sound effects, audio filters, markers, comment overlay, Zoom view controls | Runs right away |
-| **On-air** | Go Live / Record / End, pause or split recording, public chat comments, profile switch, Zoom new / leave / end / mute all / record | **Dry run unless explicitly confirmed** |
+| Read | Pre-show check, status, lists, thumbnails | Never changes anything |
+| Show | Scenes, overlays, mutes, volumes, camera, sounds, markers, Zoom view controls | Runs right away |
+| On-air | Go Live / Record / End, pause or split recording, public comments, switching Profiles, Zoom new / leave / end / mute all / record | **Dry run until you confirm** |
 
-On-air tools describe what they would do and stop. They only act when you have clearly asked for that exact action.
+Want Claude to look but not touch during a show? Turn on read-only mode: in the extension's settings, or `ECAMM_READ_ONLY=1` for the Terminal install.
 
-Want zero risk during a show? Turn on read-only mode and it can look but not touch.
+## Something's not working
 
-## Install
+Terminal install: run this and read the output. Paste it when you ask for help.
 
-On the Mac that runs Ecamm Live.
-
-### Easiest: one-click extension for Claude desktop
-
-1. Download **ecamm-mcp.mcpb** from the [latest release](https://github.com/guycochran/ecamm-mcp/releases/latest).
-2. Double-click it. Claude desktop opens and asks to install. Click **Install**.
-3. Ask Claude "what's Ecamm doing?" Ecamm adds **Claude (ecamm-mcp)** to **Ecamm Live > Settings > Remote Control**. Tick the box once. It won't ask again.
-
-No Terminal, no Node.js install, no config file. Read-only mode is a checkbox in the extension's settings.
-
-### Other MCP clients, or if you prefer a config file
-
-You need [Node.js](https://nodejs.org) 20 or newer. Add this to your client's MCP config (for Claude desktop: `~/Library/Application Support/Claude/claude_desktop_config.json`), then restart it:
-
-```json
-{
-  "mcpServers": {
-    "ecamm": {
-      "command": "npx",
-      "args": ["-y", "ecamm-mcp"]
-    }
-  }
-}
+```bash
+~/.ecamm-mcp/ecamm-mcp doctor
 ```
 
-Then approve it in Ecamm as in step 3 above.
+| Problem | Fix |
+| --- | --- |
+| Claude doesn't know about Ecamm | Quit Claude completely (Cmd+Q, not just closing the window) and reopen it. |
+| "Could not find Ecamm Live" | Open Ecamm Live. It has to be running. |
+| "Waiting for approval" | Click **Allow** in Ecamm Live, or tick **Claude (ecamm-mcp)** in Settings > Remote Control. |
+| It was working, then Ecamm restarted | Nothing to do. Ecamm picks a new port every launch and the server finds it again on the next request. |
+| Every tool shows up twice | You installed both ways. Remove one: delete the extension in Claude, or run `~/.ecamm-mcp/ecamm-mcp uninstall`. |
+| Ecamm asks for permission again | The saved ID in `~/.ecamm-mcp/client-uuid` was deleted. Click Allow again. |
+
+To set it up again without reinstalling: `~/.ecamm-mcp/ecamm-mcp setup`
+
+To remove the Terminal install: `~/.ecamm-mcp/ecamm-mcp uninstall`, then delete the `~/.ecamm-mcp` folder.
+
+Still stuck? [Open an issue](https://github.com/guycochran/ecamm-mcp/issues).
+
+## What it can do
+
+| Tool | Does |
+| --- | --- |
+| `ecamm_preflight` | Pre-show check: ready or not, and what to fix |
+| `ecamm_status` | Live or not, current scene, viewers, preview mode, mutes, volumes, Zoom state |
+| `ecamm_list_scenes`, `ecamm_list_overlays`, `ecamm_list` | Scenes, overlays in the current scene, cameras, videos, sounds, audio filters, profiles, destinations |
+| `ecamm_thumbnail` | Thumbnail of a scene, overlay or video |
+| `ecamm_switch_scene`, `ecamm_step_scene` | Take a scene live by name, or next / previous |
+| `ecamm_set_overlay` | Show, hide or toggle an overlay |
+| `ecamm_set_mute`, `ecamm_set_volume` | Main mute, or any bus: mic, mic2, system audio, interview, zoom, sound effects, movie, guests 1 to 4 |
+| `ecamm_set_camera`, `ecamm_set_source_mode`, `ecamm_play_video` | Camera input, camera / screen / video mode, play a video file |
+| `ecamm_sound`, `ecamm_toggle_audio_filter` | Sound effects and audio filters |
+| `ecamm_toggle` | PiP, Preview Mode, publish preview, hide UI, live demo |
+| `ecamm_comment_overlay`, `ecamm_add_marker` | Show the latest comment on screen, drop a marker |
+| `ecamm_start_stop`, `ecamm_recording` | Go Live / Record / End, pause or split the recording (confirm required) |
+| `ecamm_post_comment`, `ecamm_set_profile` | Post a public comment, switch Profile (confirm required) |
+| `ecamm_zoom` | Ecamm for Zoom: view controls run directly, meeting controls need confirm |
+| `ecamm_discover` | Find Ecamm Live again, or see which Macs on the network are running it |
+
+Things it handles so you don't have to:
+
+- **Toggles made safe.** Ecamm's mute and overlay commands only toggle. The server reads the state first, so "mute the mic" twice leaves it muted.
+- **Scene switches are confirmed.** It waits until Ecamm reports the new scene before saying it's done.
+- **Scene groups** are flattened and labeled `Group / Scene`.
+- **Waits for your Allow click.** The first request holds for up to 25 seconds while you click Allow, so you don't have to ask twice.
+
+## Limits (these are Ecamm's, not this server's)
+
+- Overlays can only be read and controlled for the **current scene**.
+- The only way to tell whether you're live is the main button's label (`Go Live` vs `End Broadcast`), which is what `ecamm_status` reports.
+- Ecamm does not publish documentation for this API. A future Ecamm update could change it.
+- A bus that doesn't exist reports as unmuted.
+- Picture-in-picture can be toggled, but Ecamm doesn't report whether it's on.
+
+## Advanced
+
+<details>
+<summary>Ecamm on a different Mac, other MCP apps, settings, building from source</summary>
+
+### How it finds Ecamm
+
+- Ecamm **uses a new port every launch**, so the server looks it up each time instead of using a fixed port.
+- **Same Mac (the normal case):** it finds Ecamm's port locally with `lsof` and connects over loopback. No Bonjour wait and no macOS Local Network permission needed.
+- **Another Mac:** set `ECAMM_HOSTNAME` (or fill in "Ecamm on another Mac" in the extension settings). The server then uses Bonjour (`_ecammliveremote._tcp`). If that works in Terminal but not from Claude, allow Claude in System Settings > Privacy & Security > Local Network.
+- If several Macs on the network run Ecamm, it picks **this Mac** first, then `ECAMM_HOSTNAME`, then a lone instance. It never guesses between two.
+
+### Settings
+
+| Variable | Use |
+| --- | --- |
+| `ECAMM_READ_ONLY=1` | Status and lists only |
+| `ECAMM_HOSTNAME` | Target a specific Mac, e.g. `Mac-Mini-M2.local` |
+| `ECAMM_HOST` | Skip discovery, `address:port` (the port changes per launch, so mainly for testing) |
+| `ECAMM_CLIENT_NAME` | Name shown in Ecamm's Remote Control list |
+| `ECAMM_APPROVAL_WAIT_S` | Seconds a request waits for your Allow click (default 25) |
+
+For the Terminal install, add them under `"env"` in the `ecamm` entry of `~/Library/Application Support/Claude/claude_desktop_config.json`.
+
+### Other MCP apps
+
+Any MCP client that runs a local stdio server works. After the Terminal install the command is:
+
+```bash
+~/.ecamm-mcp/ecamm-mcp
+```
+
+Claude Code: `claude mcp add ecamm -- ~/.ecamm-mcp/ecamm-mcp`
+
+To install without touching Claude desktop's config:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/guycochran/ecamm-mcp/main/install.sh | bash -s -- --no-claude
+```
 
 ### From source
 
 ```bash
-git clone https://github.com/guycochran/ecamm-mcp.git
-cd ecamm-mcp
+git clone https://github.com/guycochran/ecamm-mcp && cd ecamm-mcp
 npm install && npm run build
-```
-
-Point your MCP config at `node /path/to/ecamm-mcp/dist/index.js`. `npm run bundle` builds the `.mcpb` extension.
-
-## Why it's dependable
-
-- **Finds Ecamm on its own.** Ecamm uses a new port every launch. The server finds it each time, and finds it again if Ecamm restarts mid-session.
-- **"Mute" means mute.** Ecamm's mute and overlay commands are toggles. The server reads the state first, so asking to mute twice leaves you muted.
-- **Waits for confirmation.** Scene and source changes land a beat after Ecamm says "Done." The server waits until Ecamm reports the change before telling you it happened.
-- **Names, not IDs.** Scenes, overlays, cameras, sounds, filters, profiles and destinations all work by name. Scene groups show as `Group / Scene`.
-- **Plays nice with Ecamm.** Respects the status rate limit Ecamm asks for.
-
-## All 25 tools
-
-| Tier | Tools |
-| --- | --- |
-| Read | `ecamm_preflight`, `ecamm_status`, `ecamm_discover`, `ecamm_list_scenes`, `ecamm_list_overlays`, `ecamm_list`, `ecamm_thumbnail` |
-| Show | `ecamm_switch_scene`, `ecamm_step_scene`, `ecamm_set_overlay`, `ecamm_set_mute`, `ecamm_set_volume`, `ecamm_set_camera`, `ecamm_set_source_mode`, `ecamm_play_video`, `ecamm_sound`, `ecamm_toggle_audio_filter`, `ecamm_toggle`, `ecamm_comment_overlay`, `ecamm_add_marker`, `ecamm_zoom` (view controls) |
-| On-air | `ecamm_start_stop`, `ecamm_recording`, `ecamm_post_comment`, `ecamm_set_profile`, `ecamm_zoom` (new / leave / end / mute all / record) |
-
-## Settings
-
-All optional. In the Claude desktop extension, read-only mode and the other-Mac name are in the extension's settings. With a config file, add these under `"env"`.
-
-| Var | Use |
-| --- | --- |
-| `ECAMM_READ_ONLY=1` | Status and lists only. Safe mode for a show you don't want touched |
-| `ECAMM_HOSTNAME` | Control Ecamm on a different Mac, e.g. `Mac-Mini-M2.local` |
-| `ECAMM_CLIENT_NAME` | Name shown in Ecamm's Remote Control list |
-| `ECAMM_HOST` | Fixed `address:port`. Mainly for testing, since the port changes per launch |
-
-**Controlling another Mac:** set `ECAMM_HOSTNAME`. The server then finds Ecamm over Bonjour. If that works in Terminal but not from Claude, allow Claude in System Settings > Privacy & Security > Local Network. With several Ecamm Macs on the network it picks this Mac first, then `ECAMM_HOSTNAME`, then a lone instance. It never guesses between two.
-
-## Troubleshooting
-
-- **"Not approved" or empty results:** tick **Claude (ecamm-mcp)** in Ecamm Live > Settings > Remote Control.
-- **Can't find Ecamm:** make sure Ecamm Live is open, then ask Claude to "find Ecamm" (`ecamm_discover`).
-- **Asked again to approve:** the client ID lives in `~/.ecamm-mcp/client-uuid`. If that file is deleted, Ecamm treats it as a new remote.
-
-## Limits (from Ecamm's API, not this server)
-
-- Overlays can only be read and controlled for the **current scene**.
-- Live or recording state is read from the main button label in `ecamm_status`. There is no direct "am I live" flag.
-- Picture-in-picture can be toggled but Ecamm doesn't report its state.
-- `getMute` reports an absent bus as unmuted.
-- The Remote API is not publicly documented by Ecamm. A future Ecamm update could change it.
-
-## Testing status
-
-```bash
+npm run setup        # connect Claude desktop and bring up the Allow dialog
 npm test
+npm run package      # builds release/ecamm-mcp.mcpb and release/ecamm-mcp.cjs
 ```
 
-36 automated tests: unit tests plus an end-to-end run of the real server against a fake Ecamm that reproduces the real response shapes, toggle behavior, scene-switch delay, approval flow, a relaunch on a new port, loopback discovery, and the pre-show check.
+Releases: bump the version in `package.json`, `src/version.ts` and `mcpb/manifest.json`, then push a tag like `v0.2.0`. GitHub Actions builds the extension and the single-file server and attaches them to the release.
 
-Verified by hand against a live Ecamm Live install: status, discovery, all lists, scene switch and step, mute, volume, sound effects, camera, source mode, preview mode, Zoom panel, and the dry-run guard on Go Live, profile switch and Zoom end.
+</details>
 
-Not yet verified live: going live, recording controls, markers, public comments, overlays, audio filters, video playback, thumbnails, and the pre-show check.
+## Tests
+
+`npm test` runs unit tests plus an end-to-end run of the real MCP server against a fake Ecamm that reproduces the real response shapes, the toggle behavior, the scene-switch delay, the Allow flow, a relaunch on a new port, and loopback discovery. CI runs the same suite against the shipped bundle and runs `install.sh` on real Macs, with and without Node.js installed.
+
+Against a real Ecamm Live so far: discovery, the Allow dialog, status, all lists, scene switch and step, mute, volume, sound effects, camera, source mode, preview mode, the Zoom panel, and the dry-run guard on Go Live, profile switch and Zoom end. Not yet run against a real Ecamm: going live, recording controls, markers, public comments, overlays, audio filters, video playback, thumbnails and the pre-show check. If something behaves differently on your setup, please open an issue.
 
 ## Credits
 
-Built by [Guy Cochran](https://github.com/guycochran). Part of the Prodbots family of production MCP servers, alongside Resolve, ATEM, X32 and DMX.
-
 API reference and response shapes from [bitfocus/companion-module-ecamm-live](https://github.com/bitfocus/companion-module-ecamm-live) (MIT), including its `docs/ecamm-live-remote-api-v4.4.md`.
 
-Not affiliated with or endorsed by Ecamm Network. MIT licensed.
+Part of the Prodbots family, alongside the Resolve, ATEM, X32 and DMX servers. MIT licensed.

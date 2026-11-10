@@ -1,10 +1,13 @@
-# Push a tag like v0.2.0 and this builds the one-click extension and attaches it to a GitHub release.
 name: Release
+# Push a tag like v0.2.0 and this builds the extension and the single-file server and
+# attaches them to a GitHub release. The README and install.sh download from the latest release.
 on:
   push:
     tags: ['v*']
+
 permissions:
   contents: write
+
 jobs:
   release:
     runs-on: ubuntu-latest
@@ -13,10 +16,14 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: npm
       - run: npm ci
       - run: npm run build
       - run: npm test
-      - run: npm run bundle
-      - run: gh release create "$GITHUB_REF_NAME" ecamm-mcp.mcpb --title "$GITHUB_REF_NAME" --generate-notes
+      - name: Tag must match package.json
+        run: test "v$(node -p "require('./package.json').version")" = "$GITHUB_REF_NAME"
+      - run: npm run package
+      - name: Publish
         env:
           GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" release/ecamm-mcp.mcpb release/ecamm-mcp.cjs --title "ecamm-mcp $GITHUB_REF_NAME" --generate-notes

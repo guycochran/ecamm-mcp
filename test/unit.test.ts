@@ -3,7 +3,10 @@ import { EcammClient, flatten, normalizeImage, preflight, resolveItem, scalar, s
 import { chooseInstance, parseLsofPorts } from '../src/discovery.js'
 import { buildQuery } from '../src/http.js'
 import { startFake } from './fake-ecamm.js'
-import { mkdtempSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import { removeFromClaudeConfig, writeClaudeConfig } from '../src/cli.js'
+import { envValue, truthy } from '../src/env.js'
+import { VERSION } from '../src/version.js'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -47,10 +50,34 @@ describe('approval flow', () => {
     const fake = await startFake()
     fake.state.autoApprove = false
     const c = new EcammClient({ host: `127.0.0.1:${fake.port}`, stateDir: mkdtempSync(join(tmpdir(), 'ec-')) })
-    await expect(c.scenes()).rejects.toThrow(/Settings > Remote Control/)
+    await expect(c.scenes()).rejects.toThrow(/click Allow.*Settings > Remote Control/)
     expect(fake.state.permission).toBe('Pending')
     fake.state.permission = 'Allowed' // human clicks approve
     expect((await c.scenes()).length).toBe(4)
+    fake.server.close()
+  })
+
+  it('waits for the Allow click so the first call succeeds', async () => {
+    const fake = await startFake()
+    fake.state.autoApprove = false
+    const c = new EcammClient({
+      host: `127.0.0.1:${fake.port}`, stateDir: mkdtempSync(join(tmpdir(), 'ec-')), approvalWaitMs: 5000,
+    })
+    setTimeout(() => { fake.state.permission = 'Allowed' }, 300) // human clicks Allow mid-call
+    expect((await c.scenes()).length).toBe(4)
+    fake.server.close()
+  })
+
+  it('stops waiting as soon as the user clicks Deny', async () => {
+    const fake = await startFake()
+    fake.state.autoApprove = false
+    const c = new EcammClient({
+      host: `127.0.0.1:${fake.port}`, stateDir: mkdtempSync(join(tmpdir(), 'ec-')), approvalWaitMs: 20_000,
+    })
+    setTimeout(() => { fake.state.permission = 'Denied' }, 200)
+    const started = Date.now()
+    await expect(c.scenes()).rejects.toThrow(/denied/)
+    expect(Date.now() - started).toBeLessThan(5000)
     fake.server.close()
   })
 
@@ -124,6 +151,78 @@ describe('loopback discovery (no Bonjour, no Local Network permission)', () => {
     })
     expect((await c.scenes()).length).toBe(4)
     live.server.close()
+  })
+})
+
+describe('setup: Claude desktop config', () => {
+  const entry = { command: '/usr/local/bin/node', args: ['/Users/me/.ecamm-mcp/ecamm-mcp.cjs'] }
+  const claudeDir = () => {
+    const dir = join(mkdtempSync(join(tmpdir(), 'claude-')), 'Claude')
+    mkdirSync(dir)
+    return join(dir, 'claude_desktop_config.json')
+  }
+
+  it('creates the config when Claude is installed but has none', () => {
+    const path = claudeDir()
+    expect(writeClaudeConfig(entry, path).status).toBe('written')
+    expect(JSON.parse(readFileSync(path, 'utf8'))).toEqual({ mcpServers: { ecamm: entry } })
+  })
+
+  it('keeps other servers and settings, and backs up first', () => {
+    const path = claudeDir()
+    const before = { globalShortcut: 'Cmd+Space', mcpServers: { resolve: { command: 'node', args: ['x.js'] } } }
+    writeFileSync(path, JSON.stringify(before))
+    const r = writeClaudeConfig(entry, path)
+    expect(r.status).toBe('written')
+    expect(JSON.parse(readFileSync(r.backup!, 'utf8'))).toEqual(before)
+    expect(JSON.parse(readFileSync(path, 'utf8'))).toEqual({
+      globalShortcut: 'Cmd+Space',
+      mcpServers: { resolve: before.mcpServers.resolve, ecamm: entry },
+    })
+  })
+
+  it('is a no-op the second time', () => {
+    const path = claudeDir()
+    writeClaudeConfig(entry, path)
+    expect(writeClaudeConfig(entry, path)).toMatchObject({ status: 'unchanged' })
+  })
+
+  it('never overwrites a config it cannot parse', () => {
+    const path = claudeDir()
+    writeFileSync(path, '{ "mcpServers": { oops')
+    expect(writeClaudeConfig(entry, path).status).toBe('unreadable')
+    expect(readFileSync(path, 'utf8')).toBe('{ "mcpServers": { oops')
+  })
+
+  it('uninstall removes only the ecamm entry', () => {
+    const path = claudeDir()
+    writeFileSync(path, JSON.stringify({ mcpServers: { resolve: { command: 'node' } } }))
+    writeClaudeConfig(entry, path)
+    expect(removeFromClaudeConfig(path).status).toBe('written')
+    expect(JSON.parse(readFileSync(path, 'utf8'))).toEqual({ mcpServers: { resolve: { command: 'node' } } })
+    expect(removeFromClaudeConfig(path).status).toBe('unchanged')
+  })
+
+  it('says so when Claude desktop is not installed', () => {
+    expect(writeClaudeConfig(entry, join(tmpdir(), 'nope-' + Date.now(), 'cfg.json')).status).toBe('no-claude')
+  })
+})
+
+describe('env and version', () => {
+  it('treats unfilled extension settings as unset', () => {
+    expect(envValue('${user_config.hostname}')).toBeUndefined()
+    expect(envValue('  ')).toBeUndefined()
+    expect(envValue(' Mac-Mini.local ')).toBe('Mac-Mini.local')
+    expect(truthy('true')).toBe(true)
+    expect(truthy('1')).toBe(true)
+    expect(truthy('false')).toBe(false)
+    expect(truthy('${user_config.read_only}')).toBe(false)
+  })
+
+  it('version.ts, package.json and the extension manifest agree', () => {
+    const read = (f: string) => JSON.parse(readFileSync(join(__dirname, '..', f), 'utf8')).version
+    expect(read('package.json')).toBe(VERSION)
+    expect(read('mcpb/manifest.json')).toBe(VERSION)
   })
 })
 

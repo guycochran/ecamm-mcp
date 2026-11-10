@@ -1,0 +1,67 @@
+{
+  "manifest_version": "0.3",
+  "name": "ecamm-mcp",
+  "display_name": "Ecamm Live",
+  "version": "0.2.1",
+  "description": "Run Ecamm Live from Claude: scenes, overlays, audio, sound effects, markers, go live and record.",
+  "long_description": "Lets Claude control Ecamm Live on this Mac through Ecamm's own Remote Control feature (the one Stream Deck and Companion use). Ask for a scene by name, show or hide overlays, mute and set volumes, fire sound effects, drop markers, run Ecamm for Zoom, and start or stop a broadcast or recording.\n\nThe first time Claude talks to Ecamm Live, Ecamm asks \"Claude (ecamm-mcp) Wants To Control Ecamm\". Click Allow.\n\nAnything that goes on air (go live, end, record, public comments) is a dry run until you confirm it. Community project, not affiliated with Ecamm Network.",
+  "author": {
+    "name": "Guy Cochran",
+    "url": "https://github.com/guycochran"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/guycochran/ecamm-mcp"
+  },
+  "homepage": "https://github.com/guycochran/ecamm-mcp",
+  "documentation": "https://github.com/guycochran/ecamm-mcp#readme",
+  "support": "https://github.com/guycochran/ecamm-mcp/issues",
+  "license": "MIT",
+  "keywords": ["ecamm", "ecamm live", "live streaming", "video production", "podcast"],
+  "server": {
+    "type": "node",
+    "entry_point": "server/index.js",
+    "mcp_config": {
+      "command": "node",
+      "args": ["${__dirname}/server/index.js"],
+      "env": {
+        "ECAMM_READ_ONLY": "${user_config.read_only}",
+        "ECAMM_HOSTNAME": "${user_config.hostname}"
+      }
+    }
+  },
+  "user_config": {
+    "read_only": {
+      "type": "boolean",
+      "title": "Read-only mode",
+      "description": "Claude can see status and lists but can't change anything. Good for a show you don't want touched.",
+      "default": false,
+      "required": false
+    },
+    "hostname": {
+      "type": "string",
+      "title": "Ecamm on another Mac (optional)",
+      "description": "Leave blank when Ecamm Live runs on this Mac. Otherwise the other Mac's name, like Mac-Mini.local.",
+      "default": "",
+      "required": false
+    }
+  },
+  "tools": [
+    { "name": "ecamm_preflight", "description": "Pre-show check: flags a muted mic, no destination, Preview Mode left on" },
+    { "name": "ecamm_status", "description": "Live or not, current scene, viewers, mutes and volumes" },
+    { "name": "ecamm_list_scenes", "description": "All scenes" },
+    { "name": "ecamm_switch_scene", "description": "Take a scene live by name" },
+    { "name": "ecamm_set_overlay", "description": "Show or hide an overlay" },
+    { "name": "ecamm_set_mute", "description": "Mute or unmute the mic or any audio bus" },
+    { "name": "ecamm_set_volume", "description": "Set an audio bus volume" },
+    { "name": "ecamm_sound", "description": "Play and stop sound effects" },
+    { "name": "ecamm_add_marker", "description": "Drop a marker in the recording" },
+    { "name": "ecamm_start_stop", "description": "Go live, record, or end (asks for confirmation)" },
+    { "name": "ecamm_zoom", "description": "Ecamm for Zoom controls" }
+  ],
+  "tools_generated": true,
+  "compatibility": {
+    "platforms": ["darwin"],
+    "runtimes": { "node": ">=20.0.0" }
+  }
+}

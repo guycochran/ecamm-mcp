@@ -186,6 +186,11 @@ export interface ClientOptions {
   fetchImpl?: typeof fetch
   stateDir?: string
   clientName?: string
+  /**
+   * How long a call waits for the user to click Allow in Ecamm before giving up.
+   * Lets the very first request succeed instead of failing and needing a retry.
+   */
+  approvalWaitMs?: number
 }
 
 export type Permission = 'Allowed' | 'Denied' | 'Pending' | 'Not Found'
@@ -239,7 +244,7 @@ export class EcammClient {
       const hint = found.length
         ? ''
         : wantsLocal
-          ? ' Ecamm Live does not appear to be running on this Mac either.'
+          ? ''
           : ' If Bonjour works in Terminal but not here, allow Claude in System Settings > Privacy & Security > Local Network.'
       throw new EcammError(reason + hint, 'unreachable')
     }
@@ -291,15 +296,15 @@ export class EcammClient {
       try { await this.http.get('getInfo') } catch { /* side effect is the point */ }
       perm = await this.permission()
     }
-    this.approved = perm === 'Allowed'
-    if (!this.approved) {
-      throw new EcammError(
-        perm === 'Denied'
-          ? `Ecamm Live denied "${this.clientName}". Re-enable it in Ecamm Live > Settings > Remote Control.`
-          : `Waiting for approval: in Ecamm Live open Settings > Remote Control and tick "${this.clientName}", then retry.`,
-        'permission',
-      )
+    // Ecamm pops an Allow / Deny dialog on first contact. Give the user a moment to click it
+    // so the first request works instead of erroring.
+    const deadline = Date.now() + (this.opts.approvalWaitMs ?? 0)
+    while (perm !== 'Allowed' && perm !== 'Denied' && Date.now() < deadline) {
+      await sleep(Math.min(1000, Math.max(50, deadline - Date.now())))
+      perm = await this.permission()
     }
+    this.approved = perm === 'Allowed'
+    if (!this.approved) throw new EcammError(approvalMessage(perm, this.clientName), 'permission')
   }
 
   async get<T = unknown>(endpoint: string, params?: QueryParams): Promise<T> {
@@ -439,6 +444,13 @@ function sniffImage(b: Buffer): string | undefined {
   if (hex.startsWith('52494646') && hex.slice(16, 24) === '57454250') return 'image/webp'
   if (hex.startsWith('49492a00') || hex.startsWith('4d4d002a')) return 'image/tiff'
   return undefined
+}
+
+export function approvalMessage(perm: Permission, clientName: string): string {
+  return perm === 'Denied'
+    ? `Ecamm Live denied "${clientName}". Turn it back on in Ecamm Live > Settings > Remote Control, then try again.`
+    : `Waiting for approval. Ecamm Live is showing a "${clientName} Wants To Control Ecamm" dialog: click Allow, then try again. ` +
+        `No dialog? Open Ecamm Live > Settings > Remote Control and tick "${clientName}".`
 }
 
 function loadUuid(dir: string): string {

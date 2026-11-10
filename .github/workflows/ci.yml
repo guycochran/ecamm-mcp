@@ -1,0 +1,54 @@
+name: CI
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  test:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npm test
+      - run: npm run package
+      - name: Run the end-to-end suite against the shipped single-file bundle
+        run: ECAMM_MCP_ENTRY="$PWD/release/ecamm-mcp.cjs" npx vitest run test/e2e.test.ts
+
+  # The installer on a real Mac, both ways: with the Mac's own Node.js and with none.
+  install-mac:
+    strategy:
+      matrix:
+        os: [macos-latest, macos-15-intel]
+        own_node: ['', '1']
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Pretend Claude desktop is installed, with another server already configured
+        run: |
+          mkdir -p "$HOME/Library/Application Support/Claude"
+          echo '{"mcpServers":{"other":{"command":"node","args":["x.js"]}}}' > "$HOME/Library/Application Support/Claude/claude_desktop_config.json"
+      - name: Run install.sh
+        env:
+          ECAMM_MCP_REF: ${{ github.sha }}
+          ECAMM_MCP_OWN_NODE: ${{ matrix.own_node }}
+        run: bash install.sh --no-open
+      - name: Check what it left behind
+        run: |
+          "$HOME/.ecamm-mcp/ecamm-mcp" --version
+          cat "$HOME/Library/Application Support/Claude/claude_desktop_config.json"
+          node -e '
+            const c = JSON.parse(require("fs").readFileSync(process.env.HOME + "/Library/Application Support/Claude/claude_desktop_config.json", "utf8"))
+            if (!c.mcpServers.other) throw new Error("existing server was lost")
+            const e = c.mcpServers.ecamm
+            if (!e || !require("fs").existsSync(e.command) || !require("fs").existsSync(e.args[0])) throw new Error("ecamm entry is wrong")
+          '
+          if [ -n "${{ matrix.own_node }}" ]; then test -x "$HOME/.ecamm-mcp/node/bin/node"; fi
+          "$HOME/.ecamm-mcp/ecamm-mcp" doctor || true
