@@ -1,14 +1,46 @@
 {
   "name": "ecamm-mcp",
-  "version": "0.1.1",
-  "description": "MCP server for Ecamm Live (local Remote API v4.4)",
+  "version": "0.2.0",
+  "description": "Run Ecamm Live by talking to it. MCP server for Ecamm Live on the Mac (scenes, overlays, audio, sound effects, markers, go live).",
+  "author": "Guy Cochran",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/guycochran/ecamm-mcp.git"
+  },
+  "homepage": "https://github.com/guycochran/ecamm-mcp#readme",
+  "bugs": {
+    "url": "https://github.com/guycochran/ecamm-mcp/issues"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "ecamm",
+    "ecamm-live",
+    "live-streaming",
+    "claude",
+    "prodbots"
+  ],
+  "type": "module",
   "main": "dist/index.js",
+  "bin": {
+    "ecamm-mcp": "dist/index.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "build": "tsc",
     "start": "node dist/index.js",
-    "test": "vitest run"
+    "test": "vitest run",
+    "prepublishOnly": "npm run build && npm test",
+    "bundle": "bash scripts/bundle.sh"
   },
-  "license": "MIT",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.32.2",
     "bonjour-service": "^1.4.4",
@@ -18,12 +50,5 @@
     "@types/node": "^26.6.6",
     "typescript": "^7.0.2",
     "vitest": "^5.1.0"
-  },
-  "type": "module",
-  "bin": {
-    "ecamm-mcp": "dist/index.js"
-  },
-  "engines": {
-    "node": ">=20"
   }
 }

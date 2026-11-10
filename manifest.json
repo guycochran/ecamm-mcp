@@ -1,0 +1,66 @@
+{
+  "manifest_version": "0.3",
+  "name": "ecamm-mcp",
+  "display_name": "Ecamm Live",
+  "version": "0.2.0",
+  "description": "Run Ecamm Live by talking to it: scenes, overlays, audio, sound effects, markers, go live.",
+  "long_description": "Connects Claude to Ecamm Live on this Mac through Ecamm's local Remote API, the same one Stream Deck and Companion use. Switch scenes, show overlays, mute buses, fire sound effects, drop markers, run a pre-show check, and go live or record. Anything that starts or ends a broadcast, posts publicly, or ends a Zoom meeting is a dry run unless explicitly confirmed. Not affiliated with Ecamm Network.",
+  "author": {
+    "name": "Guy Cochran",
+    "url": "https://github.com/guycochran"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/guycochran/ecamm-mcp"
+  },
+  "homepage": "https://github.com/guycochran/ecamm-mcp",
+  "documentation": "https://github.com/guycochran/ecamm-mcp#readme",
+  "support": "https://github.com/guycochran/ecamm-mcp/issues",
+  "license": "MIT",
+  "keywords": [
+    "ecamm",
+    "ecamm live",
+    "live streaming",
+    "production",
+    "prodbots"
+  ],
+  "server": {
+    "type": "node",
+    "entry_point": "dist/index.js",
+    "mcp_config": {
+      "command": "node",
+      "args": [
+        "${__dirname}/dist/index.js"
+      ],
+      "env": {
+        "ECAMM_READ_ONLY": "${user_config.read_only}",
+        "ECAMM_HOSTNAME": "${user_config.hostname}"
+      }
+    }
+  },
+  "tools_generated": true,
+  "compatibility": {
+    "platforms": [
+      "darwin"
+    ],
+    "runtimes": {
+      "node": ">=20.0.0"
+    }
+  },
+  "user_config": {
+    "read_only": {
+      "type": "boolean",
+      "title": "Read-only mode",
+      "description": "Look but don't touch. Status and lists only, for a show you don't want changed.",
+      "default": false,
+      "required": false
+    },
+    "hostname": {
+      "type": "string",
+      "title": "Other Mac (optional)",
+      "description": "Leave blank to control Ecamm on this Mac. To control another Mac, enter its name, e.g. Mac-Mini-M2.local",
+      "default": "",
+      "required": false
+    }
+  }
+}
