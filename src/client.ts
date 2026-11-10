@@ -422,16 +422,24 @@ export interface EcammImage {
  */
 export function normalizeImage(raw: string): EcammImage {
   let s = raw.trim()
-  const uri = /^data:([\w/+.-]+)?(?:;[\w=-]+)*;base64,/i.exec(s)
+  const uri = /^data:[^,]*,/i.exec(s)
   if (uri) s = s.slice(uri[0].length)
-  s = s.replace(/\s+/g, '').replace(/-/g, '+').replace(/_/g, '/').replace(/=+$/, '')
-  if (!s || !/^[A-Za-z0-9+/]+$/.test(s) || s.length % 4 === 1) {
-    throw new EcammError(`Ecamm returned a thumbnail that is not base64 (starts: ${JSON.stringify(raw.slice(0, 60))})`, 'parse')
+  if (s.includes('%')) {
+    try { s = decodeURIComponent(s) } catch { /* not percent-encoded after all */ }
   }
+  s = s.replace(/-/g, '+').replace(/_/g, '/')
+  // Real Ecamm payloads carry characters outside the base64 alphabet (line wraps, escapes).
+  // Drop them and let the image signature below decide whether what is left is an image.
+  const stray = [...new Set(s.replace(/[A-Za-z0-9+/=\s]/g, ''))].slice(0, 12)
+  s = s.replace(/[^A-Za-z0-9+/]/g, '')
   const bytes = Buffer.from(s, 'base64')
   const mimeType = sniffImage(bytes)
   if (!mimeType) {
-    throw new EcammError(`Ecamm returned a thumbnail in an unrecognized format (first bytes: ${bytes.subarray(0, 8).toString('hex')})`, 'parse')
+    throw new EcammError(
+      `Ecamm returned a thumbnail that is not a recognizable image (length ${raw.length}, starts ${JSON.stringify(raw.slice(0, 40))}, ` +
+        `first bytes ${bytes.subarray(0, 8).toString('hex') || 'none'}, unexpected characters ${JSON.stringify(stray)})`,
+      'parse',
+    )
   }
   return { data: bytes.toString('base64'), mimeType }
 }

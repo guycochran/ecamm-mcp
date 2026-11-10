@@ -243,9 +243,15 @@ describe('normalizeImage', () => {
   it('reports the real format instead of assuming JPEG', () => {
     expect(normalizeImage(png.toString('base64')).mimeType).toBe('image/png')
   })
+  it('accepts the data:image/jpg prefix real Ecamm sends, and stray characters in the body', () => {
+    const b64 = jpg.toString('base64')
+    expect(normalizeImage('data:image/jpg;base64,' + b64).data).toBe(b64)
+    expect(normalizeImage('data:image/jpg;base64,' + b64.slice(0, 5) + '\\\n ' + b64.slice(5)).data).toBe(b64)
+    expect(normalizeImage('data:image/jpg;base64,' + encodeURIComponent(b64)).data).toBe(b64)
+  })
   it('explains itself when the payload is not an image', () => {
-    expect(() => normalizeImage('<html>nope</html>')).toThrow(/not base64/)
-    expect(() => normalizeImage(Buffer.from('hello world').toString('base64'))).toThrow(/unrecognized format/)
+    expect(() => normalizeImage('<html>nope</html>')).toThrow(/not a recognizable image/)
+    expect(() => normalizeImage(Buffer.from('hello world').toString('base64'))).toThrow(/first bytes 68656c6c/)
   })
 })
 
