@@ -79,7 +79,7 @@ export function chooseInstance(
   want: { hostname?: string; localHostname?: string },
 ): { pick?: DiscoveredEcamm; reason: string } {
   const norm = (s: string) => s.toLowerCase().replace(/\.local$/, '').replace(/\.$/, '')
-  if (!found.length) return { reason: 'No Ecamm Live found via Bonjour. Is Ecamm Live running?' }
+  if (!found.length) return { reason: 'Could not find Ecamm Live. Open Ecamm Live and try again.' }
   if (want.hostname) {
     const hit = found.find((f) => norm(f.hostname) === norm(want.hostname!))
     return hit

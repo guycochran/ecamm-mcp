@@ -4,6 +4,7 @@ import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { VERSION } from '../src/version.js'
 import { startFake, type FakeState } from './fake-ecamm.js'
 
 let client: Client
@@ -48,7 +49,7 @@ describe('ecamm-mcp end to end', () => {
     const h = state.log[0].headers
     expect(h['ecammlive-uuid']).toMatch(/[0-9A-F-]{36}/)
     expect(h['ecammlive-clientname']).toBe('Claude (ecamm-mcp)')
-    expect(h['user-agent']).toBe('Claude (ecamm-mcp)/0.1.1')
+    expect(h['user-agent']).toBe(`Claude (ecamm-mcp)/${VERSION}`)
   })
 
   it('flattens scene groups and resolves by partial name', async () => {

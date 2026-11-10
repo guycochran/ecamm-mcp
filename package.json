@@ -1,12 +1,15 @@
 {
   "name": "ecamm-mcp",
-  "version": "0.1.1",
-  "description": "MCP server for Ecamm Live (local Remote API v4.4)",
+  "version": "0.2.0",
+  "description": "MCP server for Ecamm Live: control scenes, overlays, audio and go-live from Claude",
   "main": "dist/index.js",
   "scripts": {
     "build": "tsc",
     "start": "node dist/index.js",
-    "test": "vitest run"
+    "test": "vitest run",
+    "package": "node scripts/package.mjs",
+    "setup": "node dist/index.js setup",
+    "doctor": "node dist/index.js doctor"
   },
   "license": "MIT",
   "dependencies": {
@@ -15,7 +18,9 @@
     "zod": "^4.6.7"
   },
   "devDependencies": {
+    "@anthropic-ai/mcpb": "^2.1.2",
     "@types/node": "^26.6.6",
+    "esbuild": "^0.28.2",
     "typescript": "^7.0.2",
     "vitest": "^5.1.0"
   },
@@ -25,5 +30,14 @@
   },
   "engines": {
     "node": ">=20"
-  }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/guycochran/ecamm-mcp.git"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ]
 }
