@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { EcammClient, flatten, resolveItem, scalar, summarizeInfo } from '../src/client.js'
+import { EcammClient, flatten, normalizeImage, preflight, resolveItem, scalar, summarizeInfo } from '../src/client.js'
 import { chooseInstance, parseLsofPorts } from '../src/discovery.js'
 import { buildQuery } from '../src/http.js'
 import { startFake } from './fake-ecamm.js'
@@ -223,5 +223,56 @@ describe('env and version', () => {
     const read = (f: string) => JSON.parse(readFileSync(join(__dirname, '..', f), 'utf8')).version
     expect(read('package.json')).toBe(VERSION)
     expect(read('mcpb/manifest.json')).toBe(VERSION)
+  })
+})
+
+describe('normalizeImage', () => {
+  const jpg = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 9, 9, 9, 9, 9, 9])
+  const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0])
+  const strict = /^[A-Za-z0-9+/]+={0,2}$/
+
+  it('passes clean base64 through', () => {
+    expect(normalizeImage(jpg.toString('base64'))).toEqual({ data: jpg.toString('base64'), mimeType: 'image/jpeg' })
+  })
+  it('strips line wraps, data URI prefixes and URL-safe characters', () => {
+    const wrapped = jpg.toString('base64').replace(/(.{4})/g, '$1\r\n')
+    expect(normalizeImage(wrapped).data).toMatch(strict)
+    expect(normalizeImage('data:image/jpeg;base64,' + wrapped).data).toBe(jpg.toString('base64'))
+    expect(normalizeImage(jpg.toString('base64url')).data).toBe(jpg.toString('base64'))
+  })
+  it('reports the real format instead of assuming JPEG', () => {
+    expect(normalizeImage(png.toString('base64')).mimeType).toBe('image/png')
+  })
+  it('explains itself when the payload is not an image', () => {
+    expect(() => normalizeImage('<html>nope</html>')).toThrow(/not base64/)
+    expect(() => normalizeImage(Buffer.from('hello world').toString('base64'))).toThrow(/unrecognized format/)
+  })
+})
+
+describe('preflight', () => {
+  const base = {
+    info: { ButtonLabel: 'New', Mute: 'no', MUTE_MIC: 'no', VOLUME_MIC: '100', PreviewMode: 'no', LiveDemo: 'no', HidingUI: 'no' },
+    sceneTitle: 'NDI Huddle',
+    destinations: [{ title: 'YouTube' }],
+    overlays: [{ title: 'Logo', visible: true }],
+  }
+  const warned = (r: ReturnType<typeof preflight>) => r.checks.filter((c) => c.status === 'warn').map((c) => c.check)
+
+  it('is ready when nothing is wrong', () => {
+    const r = preflight(base)
+    expect(r.ready).toBe(true)
+    expect(r.checks.find((c) => c.check === 'Overlays')!.detail).toContain('Logo')
+  })
+  it('flags silence, missing destination, preview mode and an existing broadcast', () => {
+    const r = preflight({
+      ...base,
+      info: { ...base.info, ButtonLabel: 'End Broadcast', Mute: 'yes', MUTE_MIC: 'yes', PreviewMode: 'yes' },
+      destinations: [],
+    })
+    expect(r.ready).toBe(false)
+    expect(warned(r)).toEqual(['On-air state', 'Main output', 'Mic', 'Destinations', 'Preview mode'])
+  })
+  it('flags a mic at zero', () => {
+    expect(warned(preflight({ ...base, info: { ...base.info, VOLUME_MIC: '0' } }))).toEqual(['Mic'])
   })
 })

@@ -50,6 +50,7 @@ No dialog, or you clicked Deny by accident? In Ecamm Live go to **Settings > Rem
 
 ## Things to try
 
+- "Am I ready to go live?"
 - "What scenes do I have?"
 - "Switch to Me + Guest."
 - "Hide the logo overlay."
@@ -61,11 +62,22 @@ No dialog, or you clicked Deny by accident? In Ecamm Live go to **Settings > Rem
 
 Scenes, overlays, cameras, sounds and destinations all work by name. Part of a name is fine if it's unique. If two things match, it asks instead of guessing.
 
+## The pre-show check
+
+Ask "am I ready to go live?" and you get one answer instead of a wall of settings. It flags what viewers would notice:
+
+- Main output or mic muted, or mic at zero
+- No streaming destination set up
+- Preview Mode left on
+- A broadcast or recording already running
+
+It also tells you which scene you'll start on and which overlays are showing. It only reads. It never changes anything.
+
 ## It won't take you live by accident
 
 | Tier | What | Behavior |
 | --- | --- | --- |
-| Read | Status, lists, thumbnails | Never changes anything |
+| Read | Pre-show check, status, lists, thumbnails | Never changes anything |
 | Show | Scenes, overlays, mutes, volumes, camera, sounds, markers, Zoom view controls | Runs right away |
 | On-air | Go Live / Record / End, pause or split recording, public comments, switching Profiles, Zoom new / leave / end / mute all / record | **Dry run until you confirm** |
 
@@ -98,6 +110,7 @@ Still stuck? [Open an issue](https://github.com/guycochran/ecamm-mcp/issues).
 
 | Tool | Does |
 | --- | --- |
+| `ecamm_preflight` | Pre-show check: ready or not, and what to fix |
 | `ecamm_status` | Live or not, current scene, viewers, preview mode, mutes, volumes, Zoom state |
 | `ecamm_list_scenes`, `ecamm_list_overlays`, `ecamm_list` | Scenes, overlays in the current scene, cameras, videos, sounds, audio filters, profiles, destinations |
 | `ecamm_thumbnail` | Thumbnail of a scene, overlay or video |
@@ -126,6 +139,7 @@ Things it handles so you don't have to:
 - The only way to tell whether you're live is the main button's label (`Go Live` vs `End Broadcast`), which is what `ecamm_status` reports.
 - Ecamm does not publish documentation for this API. A future Ecamm update could change it.
 - A bus that doesn't exist reports as unmuted.
+- Picture-in-picture can be toggled, but Ecamm doesn't report whether it's on.
 
 ## Advanced
 
@@ -185,7 +199,7 @@ Releases: bump the version in `package.json`, `src/version.ts` and `mcpb/manifes
 
 `npm test` runs unit tests plus an end-to-end run of the real MCP server against a fake Ecamm that reproduces the real response shapes, the toggle behavior, the scene-switch delay, the Allow flow, a relaunch on a new port, and loopback discovery. CI runs the same suite against the shipped bundle and runs `install.sh` on real Macs, with and without Node.js installed.
 
-Against a real Ecamm Live so far: discovery, the Allow dialog and `ecamm_status`. The rest is verified against the fake only. If something behaves differently on your setup, please open an issue.
+Against a real Ecamm Live so far: discovery, the Allow dialog, status, all lists, scene switch and step, mute, volume, sound effects, camera, source mode, preview mode, the Zoom panel, and the dry-run guard on Go Live, profile switch and Zoom end. Not yet run against a real Ecamm: going live, recording controls, markers, public comments, overlays, audio filters, video playback, thumbnails and the pre-show check. If something behaves differently on your setup, please open an issue.
 
 ## Credits
 

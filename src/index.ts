@@ -21,7 +21,7 @@ async function serve() {
     { name: 'ecamm-mcp', version: VERSION },
     {
       instructions:
-        'Controls Ecamm Live on a Mac through its local Remote API. Start with ecamm_status. ' +
+        'Controls Ecamm Live on a Mac through its local Remote API. Start with ecamm_status, or ecamm_preflight before a show. ' +
         'On the first connection Ecamm Live shows an Allow / Deny dialog; the user must click Allow ' +
         '(or tick the client in Ecamm Live > Settings > Remote Control). ' +
         'Tools marked on-air (go live/end, recording, public comments, profiles, Zoom meeting control) return a dry run unless confirm: true. ' +

@@ -106,6 +106,73 @@ export function summarizeInfo(info: Record<string, unknown>) {
   return { general, mainMuted: yes(info.Mute), audio, zoom: Object.keys(zoom).length ? zoom : undefined }
 }
 
+export interface PreflightCheck {
+  check: string
+  status: 'ok' | 'warn' | 'info'
+  detail: string
+}
+
+export interface PreflightInput {
+  info: Record<string, unknown>
+  sceneTitle?: string
+  sourceMode?: string
+  destinations: { title: string }[]
+  overlays: { title: string; visible?: unknown }[]
+}
+
+/**
+ * Pre-show checklist built only from what Ecamm reports. "warn" means a viewer would
+ * notice (silent stream, nowhere to stream to, already on air); "info" is context.
+ */
+export function preflight(input: PreflightInput): { ready: boolean; summary: string; checks: PreflightCheck[] } {
+  const { info } = input
+  const { audio, mainMuted } = summarizeInfo(info)
+  const checks: PreflightCheck[] = []
+  const add = (check: string, status: PreflightCheck['status'], detail: string) => checks.push({ check, status, detail })
+
+  const button = scalar(info.ButtonLabel).trim()
+  const onAir = /\b(end|stop|finish)\b/i.test(button)
+  add('On-air state', onAir ? 'warn' : 'ok', onAir
+    ? `Main button reads "${button}", so a broadcast or recording is already running.`
+    : `Idle. Main button reads "${button || 'unknown'}".`)
+
+  add('Scene', input.sceneTitle ? 'ok' : 'warn', input.sceneTitle
+    ? `Starting on "${input.sceneTitle}"${input.sourceMode ? ` (source: ${input.sourceMode})` : ''}.`
+    : 'Could not read the current scene.')
+
+  add('Main output', mainMuted ? 'warn' : 'ok', mainMuted ? 'Main output is MUTED. Viewers will hear nothing.' : 'Main output is unmuted.')
+
+  const mic = audio.mic
+  if (!mic) add('Mic', 'info', 'Ecamm did not report a mic bus.')
+  else if (mic.muted) add('Mic', 'warn', 'Mic is MUTED.')
+  else if (Number(mic.volume) === 0) add('Mic', 'warn', 'Mic volume is 0.')
+  else add('Mic', 'ok', `Mic is live at volume ${mic.volume ?? 'unknown'}.`)
+
+  for (const [bus, a] of Object.entries(audio)) {
+    if (bus === 'mic') continue
+    if (a.muted) add(`Audio: ${bus}`, 'info', `${bus} is muted.`)
+    else if (Number(a.volume) === 0) add(`Audio: ${bus}`, 'info', `${bus} volume is 0.`)
+  }
+
+  add('Destinations', input.destinations.length ? 'ok' : 'warn', input.destinations.length
+    ? `Available: ${input.destinations.map((d) => d.title).join(', ')}.`
+    : 'No streaming destinations are set up in Ecamm.')
+
+  if (yes(info.PreviewMode)) add('Preview mode', 'warn', 'Preview Mode is ON. Scene changes will not reach viewers until published.')
+  if (yes(info.LiveDemo)) add('Live demo', 'warn', 'Live Demo mode is ON.')
+  if (yes(info.HidingUI)) add('On-screen controls', 'info', 'Ecamm UI controls are hidden.')
+
+  const visible = input.overlays.filter((o) => o.visible === true).map((o) => o.title)
+  add('Overlays', 'info', visible.length ? `Showing now: ${visible.join(', ')}.` : 'No overlays showing in this scene.')
+
+  const warns = checks.filter((c) => c.status === 'warn')
+  return {
+    ready: warns.length === 0,
+    summary: warns.length === 0 ? 'Ready. Nothing to fix.' : `${warns.length} thing${warns.length === 1 ? '' : 's'} to fix: ${warns.map((w) => w.check).join(', ')}.`,
+    checks,
+  }
+}
+
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
 // ---------- client ----------
@@ -316,15 +383,67 @@ export class EcammClient {
     return { before, after }
   }
 
-  async image(endpoint: 'getSceneImage' | 'getOverlayImage' | 'getVideoImage', id: string): Promise<string | undefined> {
+  async image(endpoint: 'getSceneImage' | 'getOverlayImage' | 'getVideoImage', id: string): Promise<EcammImage | undefined> {
     const payload = await this.get<unknown>(endpoint, { id })
+    let raw = ''
     if (payload && typeof payload === 'object' && !Array.isArray(payload)) {
-      const icon = (payload as Record<string, unknown>).icon
-      if (typeof icon === 'string') return icon
+      const rec = payload as Record<string, unknown>
+      raw = scalar(rec.icon ?? rec.image ?? rec.data)
+    } else {
+      raw = scalar(payload)
     }
-    const s = scalar(payload)
-    return s || undefined
+    if (!raw.trim()) return undefined
+    return normalizeImage(raw)
   }
+
+  /** setMode lands a beat after it returns "Done", so poll until getCurrentMode agrees. */
+  async setSourceMode(mode: string): Promise<{ mode: string; confirmed: boolean }> {
+    await this.set('setMode', { mode })
+    const deadline = Date.now() + 2000
+    let now = ''
+    while (Date.now() < deadline) {
+      now = scalar(await this.get('getCurrentMode')).trim()
+      if (now === mode) return { mode: now, confirmed: true }
+      await sleep(100)
+    }
+    return { mode: now, confirmed: false }
+  }
+}
+
+export interface EcammImage {
+  data: string
+  mimeType: string
+}
+
+/**
+ * Ecamm hands thumbnails back as base64 from Cocoa, which may be line-wrapped, carry a
+ * data: URI prefix, or use the URL-safe alphabet. MCP clients reject anything but strict
+ * base64, so clean it, check it really decodes to an image, and report the true format.
+ */
+export function normalizeImage(raw: string): EcammImage {
+  let s = raw.trim()
+  const uri = /^data:([\w/+.-]+)?(?:;[\w=-]+)*;base64,/i.exec(s)
+  if (uri) s = s.slice(uri[0].length)
+  s = s.replace(/\s+/g, '').replace(/-/g, '+').replace(/_/g, '/').replace(/=+$/, '')
+  if (!s || !/^[A-Za-z0-9+/]+$/.test(s) || s.length % 4 === 1) {
+    throw new EcammError(`Ecamm returned a thumbnail that is not base64 (starts: ${JSON.stringify(raw.slice(0, 60))})`, 'parse')
+  }
+  const bytes = Buffer.from(s, 'base64')
+  const mimeType = sniffImage(bytes)
+  if (!mimeType) {
+    throw new EcammError(`Ecamm returned a thumbnail in an unrecognized format (first bytes: ${bytes.subarray(0, 8).toString('hex')})`, 'parse')
+  }
+  return { data: bytes.toString('base64'), mimeType }
+}
+
+function sniffImage(b: Buffer): string | undefined {
+  const hex = b.subarray(0, 12).toString('hex')
+  if (hex.startsWith('ffd8ff')) return 'image/jpeg'
+  if (hex.startsWith('89504e470d0a1a0a')) return 'image/png'
+  if (hex.startsWith('47494638')) return 'image/gif'
+  if (hex.startsWith('52494646') && hex.slice(16, 24) === '57454250') return 'image/webp'
+  if (hex.startsWith('49492a00') || hex.startsWith('4d4d002a')) return 'image/tiff'
+  return undefined
 }
 
 export function approvalMessage(perm: Permission, clientName: string): string {

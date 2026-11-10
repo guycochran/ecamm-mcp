@@ -47,6 +47,7 @@
     }
   },
   "tools": [
+    { "name": "ecamm_preflight", "description": "Pre-show check: flags a muted mic, no destination, Preview Mode left on" },
     { "name": "ecamm_status", "description": "Live or not, current scene, viewers, mutes and volumes" },
     { "name": "ecamm_list_scenes", "description": "All scenes" },
     { "name": "ecamm_switch_scene", "description": "Take a scene live by name" },
