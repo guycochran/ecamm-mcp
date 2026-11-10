@@ -6,7 +6,9 @@ Part of the Prodbots family, alongside the Resolve, ATEM, X32 and DMX servers.
 
 ## How it connects
 
-- Ecamm advertises itself over Bonjour as `_ecammliveremote._tcp` and **binds a new port every launch**, so the server discovers it rather than using a fixed port. If Ecamm relaunches mid-session, the next call rediscovers it automatically.
+- Ecamm **binds a new port every launch**, so the server finds it rather than using a fixed port. If Ecamm relaunches mid-session, the next call finds it again automatically.
+- **Same Mac (the normal case):** the server looks up Ecamm's listening port locally with `lsof` and connects over loopback. No Bonjour wait, and no need for macOS Local Network permission, which Node processes launched by Claude desktop often don't get.
+- **Another Mac:** set `ECAMM_HOSTNAME`. The server then uses Bonjour (`_ecammliveremote._tcp`). If Bonjour works in Terminal but not from Claude, allow Claude in System Settings > Privacy & Security > Local Network.
 - If several Macs on the network run Ecamm, it picks **this Mac** first, then `ECAMM_HOSTNAME`, then a lone instance. It never guesses between two.
 - First connection: Ecamm adds **"Claude (ecamm-mcp)"** to **Ecamm Live > Settings > Remote Control**. Tick it once. The client UUID is saved in `~/.ecamm-mcp/client-uuid` so Ecamm won't ask again.
 
@@ -69,7 +71,7 @@ Optional env vars:
 npm test
 ```
 
-23 tests: unit tests plus an end-to-end run of the real MCP server over stdio against a fake Ecamm that reproduces the real response shapes, the toggle behavior, the scene-switch delay, the approval flow and a relaunch on a new port. Not yet tested against a live Ecamm Live install.
+27 tests: unit tests plus an end-to-end run of the real MCP server over stdio against a fake Ecamm that reproduces the real response shapes, the toggle behavior, the scene-switch delay, the approval flow, a relaunch on a new port, and loopback discovery. Not yet tested against a live Ecamm Live install.
 
 ## Credits
 

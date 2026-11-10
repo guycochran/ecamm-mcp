@@ -12,7 +12,7 @@ const client = new EcammClient({
 })
 
 const server = new McpServer(
-  { name: 'ecamm-mcp', version: '0.1.0' },
+  { name: 'ecamm-mcp', version: '0.1.1' },
   {
     instructions:
       'Controls Ecamm Live on a Mac through its local Remote API. Start with ecamm_status. ' +

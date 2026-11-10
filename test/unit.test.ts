@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { EcammClient, flatten, resolveItem, scalar, summarizeInfo } from '../src/client.js'
-import { chooseInstance } from '../src/discovery.js'
+import { chooseInstance, parseLsofPorts } from '../src/discovery.js'
 import { buildQuery } from '../src/http.js'
 import { startFake } from './fake-ecamm.js'
 import { mkdtempSync } from 'node:fs'
@@ -62,6 +62,7 @@ describe('approval flow', () => {
     let browses = 0
     const c = new EcammClient({
       stateDir: mkdtempSync(join(tmpdir(), 'ec-')),
+      localPorts: async () => [],
       discover: async () => {
         browses++
         const port = browses === 1 ? deadPort : live.port
@@ -79,5 +80,49 @@ describe('approval flow', () => {
     const h1 = new EcammClient({ stateDir: dir }).http.headers()['EcammLive-UUID']
     const h2 = new EcammClient({ stateDir: dir }).http.headers()['EcammLive-UUID']
     expect(h1).toBe(h2)
+  })
+})
+
+describe('loopback discovery (no Bonjour, no Local Network permission)', () => {
+  it('parses lsof -F output', () => {
+    expect(parseLsofPorts('p123\ncEcamm Live\nf9\nn*:64364\nf10\nn127.0.0.1:64364\nn[::1]:50000\n')).toEqual([64364, 50000])
+    expect(parseLsofPorts('')).toEqual([])
+  })
+
+  it('uses the local port that answers the Remote API and never browses', async () => {
+    const live = await startFake()
+    let browsed = false
+    const c = new EcammClient({
+      stateDir: mkdtempSync(join(tmpdir(), 'ec-')),
+      localPorts: async () => [1, live.port], // first port is junk
+      discover: async () => { browsed = true; return [] },
+    })
+    expect((await c.scenes()).length).toBe(4)
+    expect(browsed).toBe(false)
+    expect(c.target.host).toBe(`127.0.0.1:${live.port}`)
+    live.server.close()
+  })
+
+  it('skips loopback when ECAMM_HOSTNAME names another Mac', async () => {
+    let probed = false
+    const c = new EcammClient({
+      stateDir: mkdtempSync(join(tmpdir(), 'ec-')),
+      hostname: 'some-other-mac.local',
+      localPorts: async () => { probed = true; return [] },
+      discover: async () => [],
+    })
+    await expect(c.scenes()).rejects.toThrow(/Local Network/)
+    expect(probed).toBe(false)
+  })
+
+  it('falls back to Bonjour when nothing local answers', async () => {
+    const live = await startFake()
+    const c = new EcammClient({
+      stateDir: mkdtempSync(join(tmpdir(), 'ec-')),
+      localPorts: async () => [],
+      discover: async () => [{ name: 'Ecamm Live Remote', hostname: 'only-mac.local', addresses: ['127.0.0.1'], port: live.port }],
+    })
+    expect((await c.scenes()).length).toBe(4)
+    live.server.close()
   })
 })

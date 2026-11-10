@@ -48,7 +48,7 @@ describe('ecamm-mcp end to end', () => {
     const h = state.log[0].headers
     expect(h['ecammlive-uuid']).toMatch(/[0-9A-F-]{36}/)
     expect(h['ecammlive-clientname']).toBe('Claude (ecamm-mcp)')
-    expect(h['user-agent']).toBe('Claude (ecamm-mcp)/0.1.0')
+    expect(h['user-agent']).toBe('Claude (ecamm-mcp)/0.1.1')
   })
 
   it('flattens scene groups and resolves by partial name', async () => {

@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { homedir, hostname } from 'node:os'
 import { join } from 'node:path'
-import { chooseInstance, discoverEcamm, type DiscoverFn, type DiscoveredEcamm } from './discovery.js'
+import { chooseInstance, discoverEcamm, localEcammPorts, type DiscoverFn, type DiscoveredEcamm, type LocalPortsFn } from './discovery.js'
 import { EcammError, EcammHttp, type QueryParams } from './http.js'
 
 export const AUDIO_BUSES = [
@@ -114,6 +114,7 @@ export interface ClientOptions {
   host?: string
   hostname?: string
   discover?: DiscoverFn
+  localPorts?: LocalPortsFn
   fetchImpl?: typeof fetch
   stateDir?: string
   clientName?: string
@@ -124,6 +125,7 @@ export type Permission = 'Allowed' | 'Denied' | 'Pending' | 'Not Found'
 export class EcammClient {
   readonly http: EcammHttp
   private readonly discover: DiscoverFn
+  private readonly localPorts: LocalPortsFn
   private instance?: DiscoveredEcamm
   private infoCache?: { at: number; data: Record<string, unknown> }
   private approved = false
@@ -131,11 +133,12 @@ export class EcammClient {
 
   constructor(private readonly opts: ClientOptions = {}) {
     this.discover = opts.discover ?? discoverEcamm
+    this.localPorts = opts.localPorts ?? localEcammPorts
     this.clientName = opts.clientName ?? 'Claude (ecamm-mcp)'
     this.http = new EcammHttp({
       uuid: loadUuid(opts.stateDir ?? join(homedir(), '.ecamm-mcp')),
       clientName: this.clientName,
-      clientVersion: '0.1.0',
+      clientVersion: '0.1.1',
       deviceName: hostname(),
       timeoutMs: 4000,
       fetchImpl: opts.fetchImpl,
@@ -147,15 +150,55 @@ export class EcammClient {
     return { host: this.http.host, instance: this.instance }
   }
 
+  /**
+   * Finds Ecamm. When the target is this Mac (the normal case), look for Ecamm's port locally
+   * first and use loopback: no Bonjour wait, and no dependence on macOS Local Network
+   * permission, which Claude desktop's child processes often don't get. Otherwise Bonjour.
+   */
   async locate(): Promise<DiscoveredEcamm[]> {
+    const norm = (s: string) => s.toLowerCase().replace(/\.local$/, '').replace(/\.$/, '')
+    const me = hostname()
+    const wantsLocal = !this.opts.hostname || norm(this.opts.hostname) === norm(me)
+
+    if (wantsLocal) {
+      const loop = await this.probeLocal()
+      if (loop) return [loop]
+    }
+
     const found = await this.discover(3000)
-    const { pick, reason } = chooseInstance(found, { hostname: this.opts.hostname, localHostname: hostname() })
-    if (!pick) throw new EcammError(reason, 'unreachable')
-    // Prefer loopback when Ecamm is on this Mac; otherwise first IPv4 it advertised.
-    const local = pick.hostname.toLowerCase().replace(/\.local$/, '') === hostname().toLowerCase().replace(/\.local$/, '')
+    const { pick, reason } = chooseInstance(found, { hostname: this.opts.hostname, localHostname: me })
+    if (!pick) {
+      const hint = found.length
+        ? ''
+        : wantsLocal
+          ? ' Ecamm Live does not appear to be running on this Mac either.'
+          : ' If Bonjour works in Terminal but not here, allow Claude in System Settings > Privacy & Security > Local Network.'
+      throw new EcammError(reason + hint, 'unreachable')
+    }
+    const local = norm(pick.hostname) === norm(me)
     this.instance = pick
     this.http.host = `${local ? '127.0.0.1' : pick.addresses[0]}:${pick.port}`
     return found
+  }
+
+  /** Tries each port Ecamm is listening on locally; keeps the first that answers the Remote API. */
+  private async probeLocal(): Promise<DiscoveredEcamm | undefined> {
+    const ports = await this.localPorts().catch(() => [] as number[])
+    const previous = this.http.host
+    for (const port of ports) {
+      this.http.host = `127.0.0.1:${port}`
+      try {
+        const reply = await this.http.get('getConnectionStatus')
+        if (Array.isArray(reply)) {
+          this.instance = { name: 'Ecamm Live (this Mac)', hostname: hostname(), addresses: ['127.0.0.1'], port }
+          return this.instance
+        }
+      } catch {
+        /* not the Remote API port */
+      }
+    }
+    this.http.host = previous
+    return undefined
   }
 
   async permission(): Promise<Permission> {

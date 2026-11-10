@@ -1,4 +1,37 @@
+import { execFile } from 'node:child_process'
 import { Bonjour } from 'bonjour-service'
+
+/**
+ * Ports Ecamm Live is listening on, found with lsof on this Mac.
+ *
+ * Why: macOS Local Network privacy blocks Bonjour for a Node process launched by Claude
+ * desktop (Terminal has the permission, the child process does not), so discovery comes
+ * back empty. Loopback needs no such permission, so when Ecamm is on this Mac we find its
+ * port locally and skip the network entirely.
+ */
+export type LocalPortsFn = () => Promise<number[]>
+
+export function parseLsofPorts(output: string): number[] {
+  const ports = new Set<number>()
+  for (const line of output.split('\n')) {
+    // -F output: "n*:64364", "n127.0.0.1:64364", "n[::1]:64364"
+    const m = /^n.*:(\d+)$/.exec(line.trim())
+    if (m) ports.add(Number(m[1]))
+  }
+  return [...ports]
+}
+
+export const localEcammPorts: LocalPortsFn = () =>
+  new Promise((resolve) => {
+    if (process.platform !== 'darwin') return resolve([])
+    execFile(
+      '/usr/sbin/lsof',
+      ['-nP', '-iTCP', '-sTCP:LISTEN', '-a', '-c', 'Ecamm', '-Fn'],
+      { timeout: 3000 },
+      // lsof exits 1 when nothing matches; that just means no ports.
+      (_err, stdout) => resolve(parseLsofPorts(String(stdout ?? ''))),
+    )
+  })
 
 /** Ecamm publishes _ecammliveremote._tcp and binds a NEW port on every launch. */
 export interface DiscoveredEcamm {
