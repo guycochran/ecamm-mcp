@@ -71,7 +71,7 @@ Type these into Claude. Use your own scene, overlay and sound names.
 
 **The big buttons**
 
-- "Go live on YouTube with the title Office Hours." (Claude will show you what it's about to do and ask first.)
+- "Go live on YouTube with the title Office Hours." (Say it plainly like this and it goes live. Anything less direct gets a preview of what it would do instead.)
 
 Scenes, overlays, cameras, sounds and destinations all work by name. Part of a name is fine if it's unique. If two things match, it asks instead of guessing.
 
@@ -92,7 +92,9 @@ It also tells you which scene you'll start on and which overlays are showing. It
 | --- | --- | --- |
 | Read | Pre-show check, status, lists, thumbnails | Never changes anything |
 | Show | Scenes, overlays, mutes, volumes, camera, sounds, markers, Zoom view controls | Runs right away |
-| On-air | Go Live / Record / End, pause or split recording, public comments, switching Profiles, Zoom new / leave / end / mute all / record | **Dry run until you confirm** |
+| On-air | Go Live / Record / End, pause or split recording, public comments, switching Profiles, Zoom new / leave / end / mute all / record | **Only when you clearly ask for that exact action.** Otherwise it reports what it would do and stops |
+
+To be clear about what that means: if you type "go live", it goes live without a second prompt. What it won't do is go live, end a broadcast or post publicly as a side effect of some other request.
 
 Want Claude to look but not touch during a show? Turn on read-only mode: in the extension's settings, or `ECAMM_READ_ONLY=1` for the Terminal install.
 
@@ -149,8 +151,9 @@ Things it handles so you don't have to:
 ## Limits (these are Ecamm's, not this server's)
 
 - Overlays can only be read and controlled for the **current scene**.
-- The only way to tell whether you're live is the main button's label (`Go Live` vs `End Broadcast`), which is what `ecamm_status` reports.
-- Ecamm does not publish documentation for this API. A future Ecamm update could change it.
+- The only way to tell whether you're live is the main button's label (`New` or `Record` when idle, `Finish` when live or recording, `Wait` in between), which is what `ecamm_status` reports.
+- Ecamm documents this API in its [Automating Ecamm](https://support.ecamm.com/en/articles/17683976-automating-ecamm) help article. This project isn't made by Ecamm, so a future Ecamm update could still get ahead of it.
+- A mute you set by hand may not survive a scene change. Seen once in testing; scenes appear to carry their own audio settings.
 - **Markers don't save yet.** Ecamm accepts the marker command and replies "Done", but nothing is written to the recording's marker file. Markers added by hand in Ecamm work. Being looked into.
 - A bus that doesn't exist reports as unmuted.
 - Picture-in-picture can be toggled, but Ecamm doesn't report whether it's on.
