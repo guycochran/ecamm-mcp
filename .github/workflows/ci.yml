@@ -26,6 +26,8 @@ jobs:
 
   real-media:
     runs-on: ubuntu-latest
+    # A hung package install once held this job for an hour. Fail instead of waiting six.
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
