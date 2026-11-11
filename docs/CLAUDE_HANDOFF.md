@@ -2,6 +2,8 @@
 
 Updated November 10, 2026 (America/Los_Angeles).
 
+**Latest combined checkpoint:** see [OVERNIGHT_HANDOFF.md](OVERNIGHT_HANDOFF.md) for the 224-test / 71-packaged-test result, restored recording settings, and the partially verified native Shortcut. That checkpoint supersedes older local-setup notes below.
+
 ## Codex scene-refresh cancellation follow-up
 
 Extended MCP cancellation into `refreshSceneThumbnails`: check before/after reads and thumbnail waits, skip further scene switches, and do not automatically restore after cancellation. Already-sent switches may finish. Two additional unit checks cover cancellation before any work and after thumbnail lookup, and a real MCP transport test cancels after the first scene switch and confirms the next queued command runs with no additional switches/restoration. Both cue and refresh cancellation integration cases pass against the packaged server.
