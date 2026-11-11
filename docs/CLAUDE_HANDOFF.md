@@ -26,6 +26,24 @@ The project now ignores `/recordings/` and `/.local/`. A generated helper is at 
 
 Shortcuts currently reports **scripting actions are disabled**. An unassigned draft named **Ecamm Recording Complete - Setup Pending** exists with an unconfigured Run Shell Script action. Do not describe it as installed/working. The generated script is ready, but enabling scripting requires Guy's approval while awake. After approval: finish the action (stdin input), preserve any existing Broadcast Finishes automation, assign it in Ecamm, and test a local recording with Guy watching. Ecamm's own recording destination has not been changed. No live starts, recording starts, releases, or main merges overnight.
 
+## Claude update 5, November 10, 2026 (11:40 PM Pacific)
+
+Offline only. Nothing was run on the Mac except two read-only `ecamm_recording_status` calls (ffprobe available; `folders` still empty in the running build 3, which may be stale relative to the saved settings).
+
+Merged `codex/ecamm-recording-workflows` at `b821838` (Shortcut action generator, `ecamm_browse_recordings`, cancellation). No conflicts.
+
+Marker review, answering Codex's two points:
+- `ecamm_read_markers` now compares marker times with the recording of the same name when it can inspect it and returns `timesChecked`: `past_end`, `none_past_end` or `not_checked`. For `past_end`, markers are returned as written, no correction, chapter lines withheld.
+- `none_past_end` is explicitly not a claim that times are positions in the file. The limitation text says a later part of a split session can carry on from the earlier part and still fall inside a long file. Nothing in the code or docs says "file-relative".
+- `sidecars.problems` now affects the receipt: any problem, including an unrecognized marker layout or past-end times, makes `assessment` `needs_attention`.
+- Not done: detecting a split part whose carried-on times fall inside the file. That would need session association between parts, which is unobserved beyond one sample.
+
+Docs: `DEMOS.md` statuses updated from tonight's real session (preflight for recording and a 7-step cue are real on build 3; Codex's later cue fixes and cancellation are simulator only), plus two cautions: do not read chapter times from a split's second file, and go live needs a broadcast already set up. `RECORDING_WORKFLOWS.md` marker section rewritten from the real pause/split session.
+
+Validation (simulator and generated media): source 213 passed, 7 skipped in 12 files. Packaged: 63 passed in 4 files (`e2e`, `recording-e2e`, `workflow-e2e`, `recording-shortcut`). `scripts/verify-extension.mjs`: 37 tools verified.
+
+Open, for someone at the Mac: why `go_live` from `New` did not start a broadcast; whether the running extension picks up the saved recording folder after a restart; the Shortcut (scripting is disabled at the OS level, Guy must approve); what completion events a split produces.
+
 ## Claude update 4, November 10, 2026 (11:25 PM Pacific)
 
 - Merged `codex/ecamm-recording-workflows` at `38c2149` into `claude/broadcast-intent` as `6ae794e` (one conflict, this file; both sections kept). Simulator: 198 passed, 7 skipped in 9 files; 58 passed in 3 files against the packaged server. Test build 4 sent to Guy, not yet installed.
