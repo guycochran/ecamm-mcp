@@ -1,3 +1,4 @@
+import jpeg from 'jpeg-js'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import { mkdtempSync } from 'node:fs'
@@ -159,6 +160,110 @@ describe('ecamm-mcp end to end', () => {
     const r = await call('ecamm_thumbnail', { kind: 'scene', ref: 'Me (full)' })
     expect(r.raw.content[0]).toMatchObject({ type: 'image', mimeType: 'image/jpeg' })
     expect(r.raw.content[0].data).toMatch(/^[A-Za-z0-9+/]+={0,2}$/)
+  })
+
+  it('warns when a thumbnail is for a scene that is not on screen', async () => {
+    const r = await call('ecamm_thumbnail', { kind: 'scene', ref: 'Speaker Stage' })
+    expect(r.raw.content[0]).toMatchObject({ type: 'image' })
+    expect(r.raw.content[1].text).toContain('may be out of date')
+    const cur = await call('ecamm_thumbnail', { kind: 'scene', ref: 'Me (full)' })
+    expect(cur.raw.content).toHaveLength(1)
+  })
+
+  describe('scene sheet', () => {
+    const sheet = async (args: { refresh?: boolean } = {}) => {
+      const r = await call(args.refresh ? 'ecamm_refresh_scene_sheet' : 'ecamm_scene_sheet')
+      return { r, meta: JSON.parse(r.raw.content[1].text!) }
+    }
+    const switches = () => state.log.filter((l) => l.path === 'setScene').length
+    const reset = async () => {
+      state.live = false
+      state.busyUntil = 0
+      state.buttonLabel = undefined
+      state.onSetScene = undefined
+      state.ignoreSceneId = undefined
+      await client.callTool({ name: 'ecamm_switch_scene', arguments: { scene: 'Me (full)' } })
+      state.redrawn = { 'S-ME': true }
+    }
+    const byScene = (meta: { scenes: { scene: string; thumbnail: string }[] }) =>
+      Object.fromEntries(meta.scenes.map((s) => [s.scene, s.thumbnail]))
+
+    it('changes nothing by default and says which pictures may be old', async () => {
+      await reset()
+      const before = switches()
+      const { r, meta } = await sheet()
+      expect(switches()).toBe(before)
+      expect(r.raw.content[0]).toMatchObject({ type: 'image', mimeType: 'image/jpeg' })
+      expect(meta.changedEcamm).toBe(false)
+      expect(byScene(meta)).toEqual({
+        'Me (full)': 'on-screen', 'Guests / Me + Guest Half': 'stored', 'Guests / Speaker Stage': 'stored', 'Me w/comment': 'stored',
+      })
+      expect(meta.scenes.map((s: { number: number }) => s.number)).toEqual([1, 2, 3, 4])
+    })
+
+    it('refresh visits every scene, verifies the return, and yields one picture', async () => {
+      await reset()
+      const { r, meta } = await sheet({ refresh: true })
+      const img = jpeg.decode(Buffer.from((r.raw.content[0] as { data: string }).data, 'base64'))
+      expect(img.width).toBeGreaterThan(500)
+      expect(img.height).toBeGreaterThan(4 * 200)
+      expect(meta).toMatchObject({ changedEcamm: true, returnToStartingScene: 'verified', startedOn: 'Me (full)', onScreenNow: 'Me (full)' })
+      expect(byScene(meta)).toEqual({
+        'Me (full)': 'on-screen', 'Guests / Me + Guest Half': 'refreshed', 'Guests / Speaker Stage': 'refreshed', 'Me w/comment': 'refreshed',
+      })
+      expect(state.scene).toBe('S-ME')
+    }, 30000)
+
+    it.each([
+      ['live', () => { state.live = true }, 'live or recording'],
+      ['starting or ending', () => { state.busyUntil = Date.now() + 60000 }, 'starting or ending'],
+      ['an unreadable button label', () => { state.buttonLabel = 'Aufnehmen' }, 'Aufnehmen'],
+    ])('refuses to refresh while %s', async (_name, arrange, reason) => {
+      await reset()
+      arrange()
+      const before = switches()
+      const { meta } = await sheet({ refresh: true })
+      expect(switches()).toBe(before)
+      expect(meta.changedEcamm).toBe(false)
+      expect(meta.refreshRefused).toContain(reason)
+      await reset()
+    }, 20000)
+
+    it('stops without restoring when someone else changes the scene mid-capture', async () => {
+      await reset()
+      let n = 0
+      state.onSetScene = () => { if (++n === 2) setTimeout(() => { state.scene = 'S-COMMENT' }, 200) }
+      const { meta } = await sheet({ refresh: true })
+      state.onSetScene = undefined
+      expect(meta.stoppedEarly).toContain('changed by someone else')
+      expect(meta.returnToStartingScene).toBe('skipped')
+      expect(state.scene).toBe('S-COMMENT') // their choice stands
+      expect(meta.onScreenNow).toBe('Me w/comment')
+      expect(byScene(meta)['Me (full)']).toBe('refreshed') // was on screen when this began
+    }, 30000)
+
+    it('stops without restoring when a broadcast starts mid-capture', async () => {
+      await reset()
+      let n = 0
+      state.onSetScene = () => { if (++n === 1) state.live = true }
+      const { meta } = await sheet({ refresh: true })
+      state.onSetScene = undefined
+      const landedOn = state.scene
+      state.live = false
+      expect(meta.stoppedEarly).toContain('on-air')
+      expect(meta.returnToStartingScene).toBe('skipped')
+      expect(landedOn).not.toBe('S-ME')
+    }, 30000)
+
+    it('reports a failed return instead of claiming it', async () => {
+      await reset()
+      state.ignoreSceneId = 'S-ME'
+      const { meta } = await sheet({ refresh: true })
+      state.ignoreSceneId = undefined
+      expect(meta.returnToStartingScene).toBe('failed')
+      expect(meta.onScreenNow).not.toBe('Me (full)')
+      await reset()
+    }, 30000)
   })
 
   it('waits for the source mode to land before reporting it', async () => {

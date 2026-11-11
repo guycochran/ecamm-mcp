@@ -109,18 +109,35 @@ export function summarizeInfo(info: Record<string, unknown>) {
   return { general, mainMuted: yes(info.Mute), audio, zoom: Object.keys(zoom).length ? zoom : undefined }
 }
 
-export type OnAirState = 'idle' | 'on-air' | 'busy' | 'ended'
+export type OnAirState = 'idle' | 'on-air' | 'busy' | 'ended' | 'unknown'
 
 /**
- * Ecamm has no "am I live" flag, only the main button's label. Seen on real Ecamm:
+ * Ecamm has no "am I live" flag, only the main button's label. Seen on real Ecamm (English):
  * New / Record (idle), Finish (live or recording), Wait (starting or ending), OK (ended, summary showing).
+ * "Go Live" is the idle label Ecamm's Stream Deck guide names; it has not been observed here.
+ *
+ * Anything else, including a missing label or a localized one, is 'unknown'. Unknown is never
+ * treated as idle: callers must not change production state on a label they cannot read.
  */
 export function onAirState(buttonLabel: unknown): OnAirState {
   const b = scalar(buttonLabel).trim()
   if (/^wait/i.test(b)) return 'busy'
   if (/^ok$/i.test(b)) return 'ended'
-  if (/\b(end|stop|finish)\b/i.test(b)) return 'on-air'
-  return 'idle'
+  if (/^(finish|end|stop)\b/i.test(b)) return 'on-air'
+  if (/^(new|record|go live)$/i.test(b)) return 'idle'
+  return 'unknown'
+}
+
+export type ThumbnailStatus = 'on-screen' | 'refreshed' | 'visited' | 'stored'
+
+export interface ThumbnailRefresh {
+  /** Per scene id. 'refreshed' = Ecamm was seen to redraw it; 'visited' = shown, redraw not observed. */
+  status: Map<string, ThumbnailStatus>
+  /** Why the walk stopped early, if it did. */
+  stopped?: string
+  /** verified = back on the starting scene; failed = tried and it did not land; skipped = deliberately not attempted. */
+  restore: 'verified' | 'failed' | 'skipped' | 'not-needed'
+  restoreNote?: string
 }
 
 export interface PreflightCheck {
@@ -152,7 +169,10 @@ export function preflight(input: PreflightInput): { ready: boolean; summary: str
   if (state === 'on-air') add('On-air state', 'warn', `Main button reads "${button}", so a broadcast or recording is already running.`)
   else if (state === 'busy') add('On-air state', 'warn', `Main button reads "${button}". Ecamm is in the middle of starting or ending a broadcast.`)
   else if (state === 'ended') add('On-air state', 'warn', `Main button reads "${button}". The last broadcast ended and Ecamm is waiting for you to dismiss its summary.`)
-  else add('On-air state', 'ok', `Idle. Main button reads "${button || 'unknown'}".`)
+  else if (state === 'unknown') add('On-air state', 'warn', button
+    ? `Main button reads "${button}", which this tool does not recognize, so it cannot tell whether Ecamm is on air.`
+    : 'Ecamm did not report its main button, so this tool cannot tell whether it is on air.')
+  else add('On-air state', 'ok', `Idle. Main button reads "${button}".`)
 
   add('Scene', input.sceneTitle ? 'ok' : 'warn', input.sceneTitle
     ? `Starting on "${input.sceneTitle}"${input.sourceMode ? ` (source: ${input.sourceMode})` : ''}.`
@@ -399,6 +419,61 @@ export class EcammClient {
       await sleep(100)
     }
     return { before, after }
+  }
+
+  /** A scene's stored thumbnail. Ecamm only refreshes it while that scene is on screen. */
+  sceneImage(id: string): Promise<EcammImage | undefined> {
+    return this.image('getSceneImage', id).catch(() => undefined)
+  }
+
+  /**
+   * Walk the given scenes so Ecamm redraws their thumbnails, then go back to the start.
+   *
+   * This changes what Ecamm shows, so it is only for an explicit request. It re-checks
+   * before every step and stops, without restoring, if anything it did not do itself has
+   * changed: someone picked another scene or profile, or a broadcast or recording started.
+   * Restoring over a person's own change would be worse than leaving it.
+   */
+  async refreshSceneThumbnails(sceneIds: string[], startId: string, maxWaitMs = 3500): Promise<ThumbnailRefresh> {
+    const status = new Map<string, ThumbnailStatus>([[startId, 'on-screen']])
+    let expected = startId
+    const blocker = async (): Promise<string | undefined> => {
+      const cur = await this.currentScene().catch(() => undefined)
+      if (cur === undefined) return 'Ecamm stopped answering'
+      if (cur !== expected) return 'the scene was changed by someone else during capture'
+      const state = onAirState((await this.info()).ButtonLabel)
+      if (state !== 'idle' && state !== 'ended') return `Ecamm's state changed to "${state}" during capture`
+      return undefined
+    }
+
+    for (const id of sceneIds) {
+      if (id === startId) continue
+      const stop = await blocker()
+      if (stop) return { status, stopped: stop, restore: 'skipped', restoreNote: 'Left as found, so a change someone else made is not overwritten.' }
+      const before = (await this.sceneImage(id))?.data
+      if (!(await this.switchScene(id))) continue // never landed; expected is unchanged and re-checked next loop
+      expected = id
+      status.set(id, 'visited')
+      const deadline = Date.now() + maxWaitMs
+      while (Date.now() < deadline) {
+        await sleep(350)
+        const now = (await this.sceneImage(id))?.data
+        if (now && now !== before) {
+          status.set(id, 'refreshed')
+          await sleep(900) // the outline appears first; give the picture itself a beat
+          break
+        }
+      }
+    }
+
+    if (expected === startId) return { status, restore: 'not-needed' }
+    const stop = await blocker()
+    if (stop) return { status, stopped: stop, restore: 'skipped', restoreNote: 'Left as found, so a change someone else made is not overwritten.' }
+    await this.switchScene(startId)
+    const back = (await this.currentScene().catch(() => undefined)) === startId
+    return back
+      ? { status, restore: 'verified' }
+      : { status, restore: 'failed', restoreNote: 'Ecamm did not return to the starting scene. Check which scene is on screen.' }
   }
 
   async image(endpoint: 'getSceneImage' | 'getOverlayImage' | 'getVideoImage', id: string): Promise<EcammImage | undefined> {

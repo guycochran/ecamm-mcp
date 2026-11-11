@@ -1,3 +1,5 @@
+import jpeg from 'jpeg-js'
+import { buildSceneSheet } from '../src/sheet.js'
 import { describe, expect, it } from 'vitest'
 import { EcammClient, flatten, normalizeImage, onAirState, preflight, resolveItem, scalar, summarizeInfo } from '../src/client.js'
 import { chooseInstance, parseLsofPorts } from '../src/discovery.js'
@@ -304,6 +306,60 @@ describe('onAirState', () => {
     expect(onAirState('Wait')).toBe('busy')
     expect(onAirState('OK')).toBe('ended')
     expect(onAirState(['Finish'])).toBe('on-air')
+    expect(onAirState('Go Live')).toBe('idle')
+  })
+  it('never calls an unreadable label idle', () => {
+    expect(onAirState('')).toBe('unknown')
+    expect(onAirState(undefined)).toBe('unknown')
+    expect(onAirState('Aufnehmen')).toBe('unknown')
+    expect(onAirState('Newsroom')).toBe('unknown')
+  })
+})
+
+describe('scene sheet', () => {
+  const still = (r: number, g: number, b: number, bars = true) => {
+    const n = 96
+    const data = Buffer.alloc(n * n * 4)
+    for (let y = 0; y < n; y++)
+      for (let x = 0; x < n; x++) {
+        const o = (y * n + x) * 4
+        const bar = bars && (y < 21 || y >= 75)
+        data[o] = bar ? 0 : r; data[o + 1] = bar ? 0 : g; data[o + 2] = bar ? 0 : b; data[o + 3] = 255
+      }
+    return Buffer.from(jpeg.encode({ data, width: n, height: n }, 90).data).toString('base64')
+  }
+  const px = (img: { data: Uint8Array | Buffer; width: number }, x: number, y: number) => {
+    const o = (y * img.width + x) * 4
+    return [img.data[o], img.data[o + 1], img.data[o + 2]]
+  }
+
+  it('lays out one column, draws labels, and places each still under its label', () => {
+    const sheet = jpeg.decode(Buffer.from(buildSceneSheet([
+      { label: 'Intro', jpeg: still(200, 30, 30) },
+      { label: 'Main cam', jpeg: still(30, 30, 200), note: 'may be out of date' },
+    ]), 'base64'))
+    expect(sheet.width).toBe(20 + 576 + 20)
+    // label text is light on a dark background somewhere in the first label strip
+    let lit = 0
+    for (let y = 20; y < 54; y++) for (let x = 20; x < 120; x++) if (px(sheet, x, y)[0] > 180) lit++
+    expect(lit).toBeGreaterThan(30)
+    // first still is red, second is blue
+    const firstMid = px(sheet, 300, 20 + 84 + 160)
+    expect(firstMid[0]).toBeGreaterThan(150); expect(firstMid[2]).toBeLessThan(90)
+    const secondMid = px(sheet, 300, sheet.height - 20 - 160)
+    expect(secondMid[2]).toBeGreaterThan(150); expect(secondMid[0]).toBeLessThan(90)
+  })
+  it('switches to two columns past six scenes and survives a missing thumbnail', () => {
+    const cells = Array.from({ length: 7 }, (_, i) => ({ label: `Scene ${i + 1}`, jpeg: i === 3 ? undefined : still(80, 160, 80) }))
+    const sheet = jpeg.decode(Buffer.from(buildSceneSheet(cells), 'base64'))
+    expect(sheet.width).toBe(20 + 2 * (576 + 20))
+  })
+  it('keeps a frame for an all-black scene instead of trimming it away', () => {
+    const sheet = jpeg.decode(Buffer.from(buildSceneSheet([{ label: 'Dark', jpeg: still(0, 0, 0, false) }]), 'base64'))
+    expect(sheet.height).toBeGreaterThan(300)
+  })
+  it('handles labels outside the built-in font and very long names', () => {
+    expect(() => buildSceneSheet([{ label: 'Caf\u00e9 \u2014 ' + 'x'.repeat(200), jpeg: still(9, 9, 9) }])).not.toThrow()
   })
 })
 
