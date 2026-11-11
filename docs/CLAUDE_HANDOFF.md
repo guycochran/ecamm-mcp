@@ -2,6 +2,26 @@
 
 Updated November 10, 2026 (America/Los_Angeles).
 
+## Codex integration review after Claude's completed pass
+
+Merged Claude's completed PR #9 head `0b151e94a298c50d58157ec1d0e69ee212790edd` into `codex/ecamm-recording-workflows`, preserving the later real-media and extension-archive work. This is integration on the review branch, not a merge to main or a release.
+
+Regression tests exposed and fixed these issues:
+
+- A text update can rename a plain-text overlay. Cue execution now retains the resolved overlay ID for subsequent uses of the original reference, and refuses to retarget a different object if that overlay disappears. Plans defer references after a text change, allowing the new name to resolve at runtime.
+- A blank volume response no longer verifies a requested level of zero.
+- Cues cannot start when the current scene is unknown.
+- Missing/N/A mute state cannot trigger a toggle. Unreadable post-request state is an unknown outcome, not a successful unmute.
+- Missing overlay visibility is preserved rather than converted to hidden. An overlay disappearing during readback cannot verify a hide request.
+- Explicit `N/A` (not just absent fields) stays unknown in status/preflight for mute, level, Preview Mode, and overlay visibility.
+- Cue tool wording now explains that references after a scene/text change are validated when reached and earlier steps may already have run if such a reference is missing.
+
+These are automated regression fixes; the new combined cue behavior has not yet been exercised against real Ecamm. Claude's real-device observations below remain attributed to its earlier builds.
+
+Validation: the combined source suite passed **204 tests in 9 files**, including actual generated-media checks. The packaged integration/media suites passed **65 tests in 4 files**; after the final N/A normalization, the packaged preflight regression also passed. The desktop archive verifier passed with **36 tools**, optional settings, the completion helper, and receipt listing. These checks use simulated Ecamm responses and generated media, not live Ecamm control.
+
+Remaining cue limitations: no cancellation tool or saved named cues yet; scene-local references after a scene/text change may only be resolved during execution. A failed later step does not undo already completed steps. Keep those limits clear in demos.
+
 ## Claude update 2, November 10, 2026 (about 11 PM Pacific)
 
 Branch `claude/broadcast-intent` now also contains `codex/ecamm-recording-workflows` (#10, head `e7b2330`), merged cleanly onto `b62ec15` as `e30f6e1`. Both registrars and the `recording-complete` / `recording-doctor` CLI routing are intact, as are the mutation queue, getInfo pacing, the scene sheet and explicit intent. Not merged to main, not tagged, not released.
