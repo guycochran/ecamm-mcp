@@ -26,11 +26,27 @@
       "args": ["${__dirname}/server/index.js"],
       "env": {
         "ECAMM_READ_ONLY": "${user_config.read_only}",
-        "ECAMM_HOSTNAME": "${user_config.hostname}"
+        "ECAMM_HOSTNAME": "${user_config.hostname}",
+        "ECAMM_RECORDING_FOLDER": "${user_config.recording_folder}",
+        "ECAMM_FFPROBE": "${user_config.ffprobe}"
       }
     }
   },
   "user_config": {
+    "recording_folder": {
+      "type": "string",
+      "title": "Recording folder (optional)",
+      "description": "Full path to the folder on this Mac containing recordings you want the assistant to inspect. Leave blank to disable media-file access.",
+      "default": "",
+      "required": false
+    },
+    "ffprobe": {
+      "type": "string",
+      "title": "Media inspector location (optional)",
+      "description": "Full path to an installed ffprobe executable. Required for media inspection if ffprobe is not already available to the app. Ecamm controls work without it.",
+      "default": "",
+      "required": false
+    },
     "read_only": {
       "type": "boolean",
       "title": "Read-only mode",

@@ -65,9 +65,18 @@ Guy wants an Ecamm MCP that impresses the Ecamm community through useful scene a
 - This work: `codex/ecamm-api-alignment`.
 - Existing Claude work: [PR #7: scene sheet](https://github.com/guycochran/ecamm-mcp/pull/7). Its description says it includes [PR #6](https://github.com/guycochran/ecamm-mcp/pull/6). Both were open when reviewed. Do not recreate the sheet or independently bump to 0.2.4.
 - Read [research and feature priorities](RESEARCH.md) before implementing more endpoints.
+- For worship/interview preparation, guest controls, recording files, and editor handoff, read the [workflow implementation plan](WORKFLOW_IMPLEMENTATION_PLAN.md). It distinguishes documented controls from operator steps and gives staged acceptance checks; none of those proposed features are claimed shipped.
 - No real broadcast, recording, scene, overlay, or audio controls were operated during this work. Installed app resources were read; automated tests used a simulator.
 
 ## Completed in this branch
+
+### Recording workflow follow-up (local branch `codex/ecamm-recording-workflows`)
+
+Implemented separate modules for read-only intent-aware preparation, a persistent completion-event helper, opt-in media inspection, and explicit-file editing receipts. See [setup and limits](RECORDING_WORKFLOWS.md). New modules: `recordings.ts`, `recording-cli.ts`, and `workflow-tools.ts`; integration is confined to `index.ts` and optional extension settings. Existing `tools.ts`, `client.ts`, and scene-sheet tests are untouched by this follow-up. Preserve both tool registrars when reconciling entry points. New functionality is not a claim that the shared state/queue work below is complete.
+
+The completion helper is usable without a running chat. Media inspection requires externally installed ffprobe; no automatic installer or signed Shortcut is included. Associated tracks must be explicitly supplied. No media transfer, guest admission, profile creation, or recording-preference automation is implemented. Real-Ecamm and actual media-decoding acceptance remain outstanding.
+
+### Earlier API-alignment work
 
 1. Corrected marker and recording-pause endpoint names against the official API and the installed Stream Deck plugin.
 2. Normalized the legacy `system audio` input to the HTTP `systemaudio` bus for both mute and volume. Both public spellings remain accepted.
