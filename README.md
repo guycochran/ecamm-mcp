@@ -4,7 +4,7 @@ Run **Ecamm Live** from a chat with Claude. Type what you want in plain words an
 
 "Am I ready to go live?" "Switch to my guest scene." "Show the lower third." "Drop a marker called Q&A."
 
-It isn't a replacement for your Stream Deck. A button is still the fastest way to cut a scene on a beat. This is for what buttons can't do: checking your setup before a show, running several steps from one sentence, and anything you'd rather describe than program.
+It isn't a replacement for your Stream Deck. A button is still the fastest way to cut a scene on a beat. This is for what buttons can't do: checking your setup before a show, running several steps from one sentence, checking on your studio Mac from your phone, and anything you'd rather describe than program.
 
 It uses Ecamm's own Remote Control feature, the same one Stream Deck and Companion use, so there is nothing to change in your Ecamm setup. It runs on your Mac and talks to Ecamm Live locally.
 
@@ -59,7 +59,7 @@ Type these into Claude. Use your own scene, overlay and sound names.
 - "Am I ready to go live?"
 - "What scenes do I have?"
 - "Show me a picture of all my scenes."
-- "Show me a thumbnail of the Interview scene."
+- "Show me a thumbnail of the Interview scene." (current only for the scene you're on; see [Check your studio from your phone](#check-your-studio-from-your-phone))
 
 **During the show**
 
@@ -75,6 +75,24 @@ Type these into Claude. Use your own scene, overlay and sound names.
 - "Go live on YouTube with the title Office Hours." (Say it plainly like this and it goes live. Anything less direct gets a preview of what it would do instead.)
 
 Scenes, overlays, cameras, sounds and destinations all work by name. Part of a name is fine if it's unique. If two things match, it asks instead of guessing.
+
+## Check your studio from your phone
+
+You don't have to be at the Mac. If you use Claude on your phone and the Claude desktop app is open on the Mac that runs Ecamm, you can ask from wherever you are:
+
+- "Is Ecamm ready for tonight's show?"
+- "Send me a picture of every scene."
+- "What's muted? What are my levels?"
+- "Switch to the intro scene and send me what it looks like."
+
+Claude answers with the status and sends the scene pictures into the chat. This was tested from the Claude phone app against a Mac running Ecamm: status, and a labeled sheet of every scene.
+
+What you need to know:
+
+- **The Mac has to be awake** with the Claude desktop app and Ecamm both open.
+- **Phone-to-desktop is a Claude feature, not part of this project.** It needs a paid Claude plan. See Claude's guide: [Assign tasks from anywhere](https://support.claude.com/en/articles/13947068-assign-tasks-from-anywhere-in-claude-cowork).
+- **Pictures are stills, not a live view.** Ecamm keeps one small thumbnail per scene and only refreshes it while that scene is on screen. A picture of a scene you're not on can be old.
+- **To get fresh pictures of every scene, it switches through them** and then returns to the scene you were on. It won't do that while you're live or recording; you get the stored pictures instead, with the ones that may be old marked.
 
 ## The pre-show check
 
@@ -157,6 +175,7 @@ Things it handles so you don't have to:
 - Ecamm documents this API in its [Automating Ecamm](https://support.ecamm.com/en/articles/17683976-automating-ecamm) help article. This project isn't made by Ecamm, so a future Ecamm update could still get ahead of it.
 - A mute you set by hand may not survive a scene change. Seen once in testing; scenes appear to carry their own audio settings.
 - **Markers don't save yet.** Ecamm accepts the marker command and replies "Done", but nothing is written to the recording's marker file. Markers added by hand in Ecamm work. Being looked into.
+- A scene's thumbnail only updates while that scene is on screen, so a thumbnail of any other scene may be out of date.
 - A bus that doesn't exist reports as unmuted.
 - Picture-in-picture can be toggled, but Ecamm doesn't report whether it's on.
 
@@ -218,7 +237,7 @@ Releases: bump the version in `package.json`, `src/version.ts` and `mcpb/manifes
 
 `npm test` runs unit tests plus an end-to-end run of the real MCP server against a fake Ecamm that reproduces the real response shapes, the toggle behavior, the scene-switch delay, the Allow flow, a relaunch on a new port, and loopback discovery. CI runs the same suite against the shipped bundle and runs `install.sh` on real Macs, with and without Node.js installed.
 
-Against a real Ecamm Live so far, including an unlisted YouTube test broadcast: discovery, the Allow dialog, status, the pre-show check, all lists, thumbnails, scene switch and step, overlays, mute, volume, sound effects, camera, source mode, preview mode, the Zoom panel, going live and ending, a public chat comment, the comment overlay, splitting the recording, and the dry-run guard on Go Live, profile switch and Zoom end. Not yet run against a real Ecamm: pausing a recording, audio filters and video playback. If something behaves differently on your setup, please open an issue.
+Against a real Ecamm Live so far, including an unlisted YouTube test broadcast: discovery, the Allow dialog, status, the pre-show check, all lists, thumbnails (including from a phone), scene switch and step, overlays, mute, volume, sound effects, camera, source mode, preview mode, the Zoom panel, going live and ending, a public chat comment, the comment overlay, splitting the recording, and the dry-run guard on Go Live, profile switch and Zoom end. Not yet run against a real Ecamm: pausing a recording, audio filters and video playback. If something behaves differently on your setup, please open an issue.
 
 ## Credits
 
