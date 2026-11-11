@@ -220,6 +220,31 @@ describe('marker files, from the layout a real Ecamm 4.6.2 wrote', () => {
     expect(split.assessment).toBe('needs_attention')
     expect(split.sidecars.problems.join(' ')).toMatch(/later than this recording is long/)
   })
+  it('does not pick a recording by extension when .mov and .mp4 share a name', async () => {
+    const base = join(root, 'Twins')
+    const dir = new URL('./fixtures/', import.meta.url)
+    await writeFile(base + '.mov', 'mov'); await writeFile(base + '.mp4', 'mp4')
+    await writeFile(base + '.txt', await readFile(new URL('ecamm-markers-4.6.2-split-part2.txt', dir), 'utf8')) // marker at 47 s
+    const calls: string[] = []
+    const probe = async (path: string) => { calls.push(path); return { streams: [{ codec_type: 'video' }, { codec_type: 'audio' }], format: { duration: path.endsWith('.mov') ? '17.6' : '300' } } }
+    const alone = await readMarkers(base + '.txt', opts, probe)
+    expect(alone.timesChecked).toBe('not_checked')
+    expect(alone.ambiguousRecordings).toHaveLength(2)
+    expect(alone.chapterLines).toEqual([])
+    expect(calls).toEqual([]) // neither was probed
+    // The receipt for the .mp4 compares with the .mp4 it already inspected, and agrees with itself.
+    const event = await receiveRecording(base + '.mp4', opts) as { eventId: string }
+    const receipt = await prepareHandoff(event.eventId, [], opts, probe)
+    expect(receipt.sidecars.markers?.comparedWith).toMatchObject({ durationSeconds: 300, markersPastEnd: 0 })
+    expect(receipt.sidecars.markers?.timesChecked).toBe('none_past_end')
+    expect(receipt.sidecars.problems).toEqual([])
+    expect(calls.filter((c) => c.endsWith('.mov'))).toEqual([])
+    expect(calls.filter((c) => c.endsWith('.mp4'))).toHaveLength(1) // main inspected once, not again for markers
+    const movEvent = await receiveRecording(base + '.mov', opts) as { eventId: string }
+    const movReceipt = await prepareHandoff(movEvent.eventId, [], opts, probe)
+    expect(movReceipt.sidecars.markers?.timesChecked).toBe('past_end')
+    expect(movReceipt.assessment).toBe('needs_attention')
+  })
   it('attaches sidecars only on an exact name match beside the recording', async () => {
     expect(await sidecarsOf(movie, opts)).toEqual({ problems: [] })
     await writeFile(join(root, 'Interview Renée $(do not run).txt'), await fixture())

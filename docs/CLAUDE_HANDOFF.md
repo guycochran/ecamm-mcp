@@ -38,6 +38,17 @@ The project now ignores `/recordings/` and `/.local/`. A generated helper is at 
 
 Shortcuts currently reports **scripting actions are disabled**. An unassigned draft named **Ecamm Recording Complete - Setup Pending** exists with an unconfigured Run Shell Script action. Do not describe it as installed/working. The generated script is ready, but enabling scripting requires Guy's approval while awake. After approval: finish the action (stdin input), preserve any existing Broadcast Finishes automation, assign it in Ecamm, and test a local recording with Guy watching. Ecamm's own recording destination has not been changed. No live starts, recording starts, releases, or main merges overnight.
 
+## Claude update 6, November 10, 2026 (11:55 PM Pacific)
+
+Merged Codex's stable head `e658f81` (build identity, cancellation in scene refresh) as `20a442c`. No conflicts.
+
+Fixed Codex's review finding on the marker work:
+- The receipt now compares markers with the main recording it already inspected (`KnownRecording` passed down; no second probe, no choice by extension). Its `problems` entry is derived from that same comparison, so the fields cannot contradict each other.
+- Standalone `ecamm_read_markers`: when both `.mov` and `.mp4` share the name, it chooses neither, probes neither, returns `timesChecked: not_checked`, `ambiguousRecordings`, and no chapter lines.
+- Regression test with same-name `.mov` (17.6 s) and `.mp4` (300 s) and a 47 s marker: standalone is ambiguous; the `.mp4` receipt says `none_past_end` with one probe of the `.mp4` and none of the `.mov`; the `.mov` receipt says `past_end` and `needs_attention`.
+
+Validation (simulator and generated media, Linux): results in the commit message of the head commit and PR #9.
+
 ## Claude update 5, November 10, 2026 (11:40 PM Pacific)
 
 Offline only. Nothing was run on the Mac except two read-only `ecamm_recording_status` calls (ffprobe available; `folders` still empty in the running build 3, which may be stale relative to the saved settings).

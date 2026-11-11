@@ -193,34 +193,51 @@ export function markersPastEnd(markers: { seconds: number }[], durationSeconds: 
 }
 
 /** Read a marker file inside the configured recording folders. Never writes. */
-export async function readMarkers(path: string, opts: RecordingOptions, probe?: Probe) {
+export interface KnownRecording { path: string; durationSeconds?: number }
+/**
+ * `recording` is the recording these markers belong to when the caller already knows it
+ * (the receipt does). Without it, the recording of the same name is looked for, and if
+ * more than one exists nothing is chosen.
+ */
+export async function readMarkers(path: string, opts: RecordingOptions, probe?: Probe, recording?: KnownRecording) {
   const canonical = await allowedRecording(path, opts.roots)
   if (extname(canonical).toLowerCase() !== '.txt') throw new Error('Marker files end in .txt and sit beside the recording with the same name.')
   if ((await stat(canonical)).size > 262144) throw new Error('That file is larger than a marker file should be (256 KB limit).')
   const parsed = parseMarkerFile(await readFile(canonical, 'utf8'))
   const titled = parsed.markers.filter((m) => m.text)
   const known = parsed.format === 'ecamm-markers-v1'
-  // Compare against the recording of the same name, when it is there and can be inspected.
-  // Marker times later than the file is long mean a later part of a split session.
+  // Marker times later than the recording is long mean a later part of a split session.
   let against: { recording: string; durationSeconds: number; markersPastEnd: number } | undefined
-  if (known) for (const ext of ['.mov', '.mp4']) {
-    try {
-      const media = await inspectRecording(canonical.slice(0, -4) + ext, opts, probe)
-      if (media.durationSeconds) against = { recording: media.path, durationSeconds: media.durationSeconds, markersPastEnd: markersPastEnd(parsed.markers, media.durationSeconds) }
-      break
-    } catch { /* no such recording, or no inspector: times stay unchecked */ }
+  let ambiguous: string[] = []
+  if (known) {
+    let target = recording
+    if (!target) {
+      const candidates: string[] = []
+      for (const ext of ['.mov', '.mp4']) {
+        try { candidates.push(await allowedRecording(canonical.slice(0, -4) + ext, opts.roots)) } catch { /* not there */ }
+      }
+      const distinct = [...new Set(candidates)]
+      if (distinct.length > 1) ambiguous = distinct
+      else if (distinct.length === 1) {
+        try { const media = await inspectRecording(distinct[0], opts, probe); target = { path: media.path, durationSeconds: media.durationSeconds } } catch { /* no inspector: times stay unchecked */ }
+      }
+    }
+    if (target?.durationSeconds) against = { recording: target.path, durationSeconds: target.durationSeconds, markersPastEnd: markersPastEnd(parsed.markers, target.durationSeconds) }
   }
   const past = against?.markersPastEnd ?? 0
   return {
     path: canonical, ...parsed,
     timesChecked: against ? (past ? 'past_end' : 'none_past_end') : 'not_checked',
     ...(against ? { comparedWith: against } : {}),
+    ...(ambiguous.length ? { ambiguousRecordings: ambiguous } : {}),
     // A convenience for descriptions. YouTube has its own rules for chapters (first at 0:00, minimum count and spacing).
-    // Withheld when times run past the end of the file: they would not be positions in it.
-    chapterLines: known && !past ? titled.map((m) => `${m.timecode.replace(/^00:/, '')} ${m.text}`) : [],
+    // Withheld when times run past the end of the file, or when it is unclear which recording they belong to.
+    chapterLines: known && !past && !ambiguous.length ? titled.map((m) => `${m.timecode.replace(/^00:/, '')} ${m.text}`) : [],
     limitations: !known ? ['This file does not match the marker layout this tool knows. Nothing was inferred from it.']
+      : ambiguous.length ? ['More than one recording shares this name (.mov and .mp4). None was chosen, marker times were not compared with a length, and chapter lines were withheld.', ...MARKER_LIMITS]
       : past ? [`${past} marker time(s) are later than the recording is long. This is probably a later part of a split session, where times carry on from the earlier part. They are not positions in this file, no correction was applied, and chapter lines were withheld.`, ...MARKER_LIMITS]
-      : against ? ['No marker time is later than the recording is long. That does not show the times are positions in this file: in a later part of a split session they can carry on from the earlier part and still fall inside a long file.', ...MARKER_LIMITS] : ['The recording of the same name could not be inspected, so marker times were not compared with its length.', ...MARKER_LIMITS],
+      : against ? ['No marker time is later than the recording is long. That does not show the times are positions in this file: in a later part of a split session they can carry on from the earlier part and still fall inside a long file.', ...MARKER_LIMITS]
+      : ['The recording of the same name could not be inspected, so marker times were not compared with its length.', ...MARKER_LIMITS],
   }
 }
 
@@ -229,14 +246,14 @@ export async function readMarkers(path: string, opts: RecordingOptions, probe?: 
  * shown comments (.srt). Only an exact name match counts. Separate-track files are not
  * looked for, because their naming has not been observed.
  */
-export async function sidecarsOf(recordingPath: string, opts: RecordingOptions, probe?: Probe) {
+export async function sidecarsOf(recordingPath: string, opts: RecordingOptions, probe?: Probe, main?: KnownRecording) {
   const base = recordingPath.slice(0, recordingPath.length - extname(recordingPath).length)
   const found: { markers?: Awaited<ReturnType<typeof readMarkers>>; comments?: { path: string }; problems: string[] } = { problems: [] }
   for (const [ext, kind] of [['.txt', 'markers'], ['.srt', 'comments']] as const) {
     let canonical: string
     try { canonical = await allowedRecording(base + ext, opts.roots) } catch { continue } // not there, or not ours to read
     if (kind === 'comments') found.comments = { path: canonical }
-    else try { found.markers = await readMarkers(canonical, opts, probe) } catch (err) { found.problems.push(err instanceof Error ? err.message : String(err)) }
+    else try { found.markers = await readMarkers(canonical, opts, probe, main ?? { path: recordingPath }) } catch (err) { found.problems.push(err instanceof Error ? err.message : String(err)) }
   }
   return found
 }
@@ -273,8 +290,9 @@ export async function prepareHandoff(eventIdValue: string, assets: ExpectedAsset
       result.push({ ...asset, status: media.status === 'changing' ? 'pending' : !matches || !media.durationSeconds ? 'needs_check' : 'metadata_checked', media })
     } catch (err) { result.push({ ...asset, status: 'unavailable', detail: err instanceof Error ? err.message : String(err) }) }
   }
-  const sidecars = await sidecarsOf(main.path, opts, probe)
-  const past = sidecars.markers ? markersPastEnd(sidecars.markers.markers, main.durationSeconds) : 0
+  // Markers are compared with the main recording already inspected above: no second probe, no choosing by extension.
+  const sidecars = await sidecarsOf(main.path, opts, probe, { path: main.path, durationSeconds: main.durationSeconds })
+  const past = sidecars.markers?.comparedWith?.markersPastEnd ?? 0
   if (sidecars.markers?.format === 'unrecognized') sidecars.problems.push('The marker file beside this recording is not in a layout this tool knows. Its markers were not read.')
   if (past) sidecars.problems.push(`${past} marker time(s) are later than this recording is long. This file is probably a later part of a split session and its marker times carry on from the earlier part. They are not offsets into this file; no correction was applied.`)
   return {
