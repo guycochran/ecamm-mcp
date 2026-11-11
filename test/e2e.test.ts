@@ -24,14 +24,14 @@ beforeAll(async () => {
   const home = mkdtempSync(join(tmpdir(), 'ecamm-home-'))
   const transport = new StdioClientTransport({
     command: process.execPath,
-    args: [join(__dirname, '..', 'dist', 'index.js')],
+    args: [process.env.ECAMM_MCP_ENTRY ?? join(__dirname, '..', 'dist', 'index.js')],
     env: { ...process.env, HOME: home, ECAMM_HOST: `127.0.0.1:${fake.port}` } as Record<string, string>,
   })
   client = new Client({ name: 'test', version: '1' })
   await client.connect(transport)
   close = () => { void client.close(); fake.server.close() }
 })
-afterAll(() => close())
+afterAll(() => close?.())
 
 describe('ecamm-mcp end to end', () => {
   it('lists the expected tools', async () => {
@@ -98,6 +98,17 @@ describe('ecamm-mcp end to end', () => {
     expect(r.json).toMatchObject({ wasMuted: true, nowMuted: false })
   })
 
+  it('updates existing overlay text without changing visibility and encodes Unicode', async () => {
+    const before = state.overlays['S-ME']['O-LT'].visible
+    const value = 'Renée & Guy\nEcamm Fam + Q&A'
+    const r = await call('ecamm_set_overlay_text', { overlay: 'lower third', text: value })
+    expect(r.isError).toBeFalsy()
+    expect(r.json).toMatchObject({ accepted: true, verified: false, text: value })
+    expect(state.overlays['S-ME']['O-LT']).toMatchObject({ text: value, visible: before })
+    const missing = await call('ecamm_set_overlay_text', { overlay: 'missing overlay', text: value })
+    expect(missing.isError).toBe(true)
+  })
+
   it('go live is a dry run without confirm', async () => {
     const r = await call('ecamm_start_stop', { destination: 'youtube' })
     expect(r.json).toMatchObject({ dryRun: true, wouldDo: 'Click "New"', destination: 'OHG YouTube' })
@@ -111,8 +122,33 @@ describe('ecamm-mcp end to end', () => {
   it('encodes spaces as %20 (Ecamm does not decode +)', async () => {
     await call('ecamm_post_comment', { text: 'hello office hours', confirm: true })
     expect(state.comments).toContain('hello office hours')
-    await call('ecamm_add_marker', { text: 'Q&A start' })
+    const marker = await call('ecamm_add_marker', { text: 'Q&A start' })
+    expect(marker.json).toMatchObject({ accepted: true, verified: false })
     expect(state.markers).toContain('Q&A start')
+    expect(state.log.find((l) => l.path === 'setAddMarker')?.query).toEqual({ text: 'Q&A start', dialogbox: 'false' })
+  })
+
+  it('uses the documented pause command and reads back the changed label', async () => {
+    const r = await call('ecamm_recording', { action: 'pause_resume', confirm: true })
+    expect(r.isError).toBeFalsy()
+    expect(state.paused).toBe(true)
+    expect(r.json.pauseButtonNowSays).toBe('Resume')
+  })
+
+  it('maps both system audio spellings to the HTTP bus for mute and volume', async () => {
+    for (const bus of ['system audio', 'systemaudio']) {
+      expect((await call('ecamm_set_mute', { bus, muted: true })).isError).toBeFalsy()
+      expect((await call('ecamm_set_volume', { bus, volume: 42 })).isError).toBeFalsy()
+    }
+    expect(state.mute.systemaudio).toBe(true)
+    expect(state.volume.systemaudio).toBe(42)
+    expect(state.log.some((l) => l.query.bus === 'system audio')).toBe(false)
+  })
+
+  it('maps the Zoom share alias to the HTTP sharing panel', async () => {
+    const r = await call('ecamm_zoom', { action: 'panel', panel: 'share' })
+    expect(r.isError).toBeFalsy()
+    expect(state.zoomPanel).toBe('sharing')
   })
 
   it('drops placeholder rows', async () => {

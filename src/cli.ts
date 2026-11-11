@@ -50,6 +50,10 @@ export function writeClaudeConfig(entry: ServerEntry, path = claudeConfigPath())
       }
     }
     const servers = config.mcpServers as Record<string, unknown> | undefined
+    const previous = servers?.ecamm as ServerEntry | undefined
+    if (previous?.env && typeof previous.env === 'object' && !Array.isArray(previous.env)) {
+      entry = { ...entry, env: { ...previous.env, ...entry.env } }
+    }
     if (servers && JSON.stringify(servers.ecamm) === JSON.stringify(entry)) return { status: 'unchanged', path }
     backup = `${path}.backup-${new Date().toISOString().replace(/[:.]/g, '-')}`
     copyFileSync(path, backup)

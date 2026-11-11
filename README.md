@@ -131,6 +131,7 @@ Still stuck? [Open an issue](https://github.com/guycochran/ecamm-mcp/issues).
 | `ecamm_thumbnail` | Thumbnail of a scene, overlay or video |
 | `ecamm_switch_scene`, `ecamm_step_scene` | Take a scene live by name, or next / previous |
 | `ecamm_set_overlay` | Show, hide or toggle an overlay |
+| `ecamm_set_overlay_text` | Update an existing text overlay while preserving styling; acceptance is reported, rendered text is not verified |
 | `ecamm_set_mute`, `ecamm_set_volume` | Main mute, or any bus: mic, mic2, system audio, interview, zoom, sound effects, movie, guests 1 to 4 |
 | `ecamm_set_camera`, `ecamm_set_source_mode`, `ecamm_play_video` | Camera input, camera / screen / video mode, play a video file |
 | `ecamm_sound`, `ecamm_toggle_audio_filter` | Sound effects and audio filters |
@@ -148,13 +149,14 @@ Things it handles so you don't have to:
 - **Scene groups** are flattened and labeled `Group / Scene`.
 - **Waits for your Allow click.** The first request holds for up to 25 seconds while you click Allow, so you don't have to ask twice.
 
-## Limits (these are Ecamm's, not this server's)
+## Compatibility and limits
 
 - Overlays can only be read and controlled for the **current scene**.
 - The only way to tell whether you're live is the main button's label (`New` or `Record` when idle, `Finish` when live or recording, `Wait` in between), which is what `ecamm_status` reports.
 - Ecamm documents this API in its [Automating Ecamm](https://support.ecamm.com/en/articles/17683976-automating-ecamm) help article. This project isn't made by Ecamm, so a future Ecamm update could still get ahead of it.
 - A mute you set by hand may not survive a scene change. Seen once in testing; scenes appear to carry their own audio settings.
-- **Markers don't save yet.** Ecamm accepts the marker command and replies "Done", but nothing is written to the recording's marker file. Markers added by hand in Ecamm work. Being looked into.
+- **Marker persistence needs a new real-device test.** Earlier builds used a different endpoint from the one documented by Ecamm. The current source uses `setAddMarker`, also found in Ecamm's bundled Stream Deck plugin. The tool reports acceptance, not verified marker-file creation.
+- **Overlay text updates need real-device verification.** `ecamm_set_overlay_text` uses the documented API to change an existing overlay, not create one. It does not change visibility and cannot read back the rendered text. Older Ecamm versions may not support it.
 - A bus that doesn't exist reports as unmuted.
 - Picture-in-picture can be toggled, but Ecamm doesn't report whether it's on.
 
@@ -219,6 +221,8 @@ Releases: bump the version in `package.json`, `src/version.ts` and `mcpb/manifes
 Against a real Ecamm Live so far, including an unlisted YouTube test broadcast: discovery, the Allow dialog, status, the pre-show check, all lists, thumbnails, scene switch and step, overlays, mute, volume, sound effects, camera, source mode, preview mode, the Zoom panel, going live and ending, a public chat comment, the comment overlay, splitting the recording, and the dry-run guard on Go Live, profile switch and Zoom end. Not yet run against a real Ecamm: pausing a recording, audio filters and video playback. If something behaves differently on your setup, please open an issue.
 
 ## Credits
+
+Development notes: [API and Stream Deck research](docs/RESEARCH.md) and [Codex / Claude handoff](docs/CLAUDE_HANDOFF.md). New compatibility changes and overlay text are simulator-tested; see the handoff for the remaining real-Ecamm checks.
 
 API reference and response shapes from [bitfocus/companion-module-ecamm-live](https://github.com/bitfocus/companion-module-ecamm-live) (MIT), including its `docs/ecamm-live-remote-api-v4.4.md`.
 

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { EcammClient, flatten, normalizeImage, onAirState, preflight, resolveItem, scalar, summarizeInfo } from '../src/client.js'
 import { chooseInstance, parseLsofPorts } from '../src/discovery.js'
-import { buildQuery } from '../src/http.js'
+import { buildQuery, EcammHttp } from '../src/http.js'
 import { startFake } from './fake-ecamm.js'
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { removeFromClaudeConfig, writeClaudeConfig } from '../src/cli.js'
@@ -187,6 +187,19 @@ describe('setup: Claude desktop config', () => {
     expect(writeClaudeConfig(entry, path)).toMatchObject({ status: 'unchanged' })
   })
 
+  it('preserves read-only and target settings during setup and allows explicit overrides', () => {
+    const path = claudeDir()
+    const env = { ECAMM_READ_ONLY: '1', ECAMM_HOSTNAME: 'Studio.local' }
+    writeClaudeConfig({ command: '/old/node', args: ['/old/server'], env }, path)
+    writeClaudeConfig(entry, path)
+    expect(JSON.parse(readFileSync(path, 'utf8')).mcpServers.ecamm).toEqual({ ...entry, env })
+    expect(writeClaudeConfig(entry, path).status).toBe('unchanged')
+    writeClaudeConfig({ ...entry, env: { ECAMM_HOSTNAME: 'Other.local' } }, path)
+    expect(JSON.parse(readFileSync(path, 'utf8')).mcpServers.ecamm.env).toEqual({
+      ECAMM_READ_ONLY: '1', ECAMM_HOSTNAME: 'Other.local',
+    })
+  })
+
   it('never overwrites a config it cannot parse', () => {
     const path = claudeDir()
     writeFileSync(path, '{ "mcpServers": { oops')
@@ -291,5 +304,26 @@ describe('onAirState', () => {
     expect(onAirState('Wait')).toBe('busy')
     expect(onAirState('OK')).toBe('ended')
     expect(onAirState(['Finish'])).toBe('on-air')
+  })
+})
+
+describe('HTTP command acknowledgements', () => {
+  const transport = (body: string) => {
+    const http = new EcammHttp({
+      uuid: 'test', clientName: 'test', clientVersion: 'test', deviceName: 'test', timeoutMs: 1000,
+      fetchImpl: (async () => new Response(body, { status: 200 })) as typeof fetch,
+    })
+    http.host = '127.0.0.1:1'
+    return http
+  }
+  it('reports an HTTP 200 access-denied response as a permission error', async () => {
+    await expect(transport('["Access denied"]').set('setAddMarker')).rejects.toMatchObject({ kind: 'permission' })
+  })
+  it('accepts both documented command acknowledgements', async () => {
+    await expect(transport('["Done"]').set('setAddMarker')).resolves.toBeUndefined()
+    await expect(transport('["Clicked it!"]').set('setClickPause')).resolves.toBeUndefined()
+  })
+  it.each(['{}', 'not JSON', '["Unsupported"]', '[]'])('does not claim success for %s', async (body) => {
+    await expect(transport(body).set('setOverlayText')).rejects.toThrow('outcome is unknown')
   })
 })

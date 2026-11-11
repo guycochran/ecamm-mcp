@@ -7,10 +7,13 @@ import { EcammError, EcammHttp, type QueryParams } from './http.js'
 import { VERSION } from './version.js'
 
 export const AUDIO_BUSES = [
-  'mic', 'mic2', 'skype', 'system audio', 'interview', 'zoom', 'soundeffects', 'movie',
+  'mic', 'mic2', 'skype', 'systemaudio', 'system audio', 'interview', 'zoom', 'soundeffects', 'movie',
   'guest_1', 'guest_2', 'guest_3', 'guest_4',
 ] as const
 export type AudioBus = (typeof AUDIO_BUSES)[number]
+
+/** Keep the original public spelling as an alias; HTTP uses systemaudio. */
+export const apiAudioBus = (bus: AudioBus) => bus === 'system audio' ? 'systemaudio' : bus
 
 export interface Item {
   id: string
@@ -373,7 +376,7 @@ export class EcammClient {
 
   /** Mute is a toggle in Ecamm. Read, toggle only if needed, read back. */
   async setMuted(bus: AudioBus | undefined, muted: boolean): Promise<{ before: boolean; after: boolean }> {
-    const params = bus ? { bus } : undefined
+    const params = bus ? { bus: apiAudioBus(bus) } : undefined
     const before = yes(await this.get('getMute', params))
     if (before !== muted) await this.set('setMute', params)
     const after = yes(await this.http.get('getMute', params))

@@ -1,6 +1,6 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { z } from 'zod'
-import { AUDIO_BUSES, EcammClient, preflight, resolveItem, scalar, summarizeInfo, yes, type Item } from './client.js'
+import { AUDIO_BUSES, apiAudioBus, EcammClient, preflight, resolveItem, scalar, summarizeInfo, yes, type Item } from './client.js'
 import { EcammError } from './http.js'
 
 type Content = { type: 'text'; text: string } | { type: 'image'; data: string; mimeType: string }
@@ -227,6 +227,21 @@ export function registerTools(server: McpServer, client: EcammClient, opts: { re
   )
 
   server.registerTool(
+    'ecamm_set_overlay_text',
+    {
+      description: 'Replace the text of an existing text or fixed overlay in the CURRENT scene, preserving its styling. Does not create or show the overlay. Requires an Ecamm version supporting setOverlayText. Reports acceptance, not verified rendered text.',
+      inputSchema: { overlay: z.string().trim().min(1), text: z.string().min(1) },
+      annotations: ann('show', 'Update overlay text'),
+    },
+    wrap('show', async ({ overlay, text: value }: { overlay: string; text: string }) => {
+      const ov = resolveItem(await client.overlays(), overlay, 'overlay')
+      await client.set('setOverlayText', { id: ov.id, text: value })
+      return text({ overlay: ov.title, id: ov.id, text: value, accepted: true, verified: false,
+        note: 'Ecamm accepted the text update. Check the rendered overlay; the Remote API does not provide text readback.' })
+    }),
+  )
+
+  server.registerTool(
     'ecamm_set_mute',
     {
       description: 'Mute or unmute. Omit bus for the main output mute. Idempotent (reads state first, since Ecamm only toggles).',
@@ -247,9 +262,10 @@ export function registerTools(server: McpServer, client: EcammClient, opts: { re
       annotations: ann('show', 'Set volume'),
     },
     wrap('show', async ({ bus, volume }: { bus: (typeof AUDIO_BUSES)[number]; volume: number }) => {
-      const before = await client.get('getVolume', { bus })
-      await client.set('setVolume', { bus, volume: Math.round(volume) })
-      const after = await client.get('getVolume', { bus })
+      const wireBus = apiAudioBus(bus)
+      const before = await client.get('getVolume', { bus: wireBus })
+      await client.set('setVolume', { bus: wireBus, volume: Math.round(volume) })
+      const after = await client.get('getVolume', { bus: wireBus })
       return text({ bus, before, after })
     }),
   )
@@ -354,8 +370,9 @@ export function registerTools(server: McpServer, client: EcammClient, opts: { re
     'ecamm_add_marker',
     { description: 'Drop a chapter/edit marker in the current recording or broadcast.', inputSchema: { text: z.string().optional() }, annotations: ann('show', 'Add marker') },
     wrap('show', async ({ text: t }: { text?: string }) => {
-      await client.set('setMarker', { text: t, dialogbox: 'false' })
-      return text({ marker: t ?? '(untitled)' })
+      await client.set('setAddMarker', { text: t, dialogbox: 'false' })
+      return text({ marker: t ?? '(untitled)', accepted: true, verified: false,
+        note: 'Ecamm accepted the marker request. The Remote API does not verify that it was saved to the recording marker file.' })
     }),
   )
 
@@ -403,7 +420,7 @@ export function registerTools(server: McpServer, client: EcammClient, opts: { re
     wrap('on-air', async ({ action, confirm }: { action: string; confirm?: boolean }) => {
       const info = await client.info(true)
       if (!confirm) return dryRun(action === 'pause_resume' ? `Click "${info.PauseButtonLabel}"` : 'Start a new recording file', {})
-      await client.set(action === 'pause_resume' ? 'setClickPauseButton' : 'setStartNewRecording')
+      await client.set(action === 'pause_resume' ? 'setClickPause' : 'setStartNewRecording')
       const after = await client.info(true)
       return text({ done: action, pauseButtonNowSays: after.PauseButtonLabel })
     }),
@@ -465,7 +482,7 @@ export function registerTools(server: McpServer, client: EcammClient, opts: { re
         'Ecamm for Zoom controls. View/self actions run directly; new_meeting, leave, end_for_all, mute_all and recording actions need confirm: true. panel shows meeting|chat|participants|share.',
       inputSchema: {
         action: z.enum(['panel', ...Object.keys(ZOOM_SAFE), ...Object.keys(ZOOM_CONFIRM)] as [string, ...string[]]),
-        panel: z.enum(['meeting', 'chat', 'participants', 'share']).optional(),
+        panel: z.enum(['meeting', 'chat', 'participants', 'share', 'sharing']).optional(),
         usePersonalMeetingId: z.boolean().optional(),
         ...confirmArg,
       },
@@ -476,7 +493,7 @@ export function registerTools(server: McpServer, client: EcammClient, opts: { re
       return wrap(tier, async () => {
         if (a.action === 'panel') {
           if (!a.panel) throw new EcammError('panel is required', 'not_found')
-          await client.set('setZoomPanel', { panel: a.panel })
+          await client.set('setZoomPanel', { panel: a.panel === 'share' ? 'sharing' : a.panel })
           return text({ panel: a.panel })
         }
         if (a.action in ZOOM_SAFE) {

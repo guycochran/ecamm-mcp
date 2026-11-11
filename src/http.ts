@@ -1,5 +1,5 @@
 /**
- * Thin HTTP transport for the Ecamm Live Remote API (v4.4).
+ * Thin HTTP transport for the Ecamm Live Remote API.
  *
  * Every call is a GET. "get*" endpoints return JSON, "set*" endpoints return ["Done"].
  * Ecamm requires identifying headers on every request, and the UUID must stay the same
@@ -88,8 +88,17 @@ export class EcammHttp {
     }
   }
 
-  /** Commands answer "Done", which is deliberately not parsed. */
+  /** HTTP 200 can still mean permission was revoked after our readiness check. */
   async set(endpoint: string, params?: QueryParams): Promise<void> {
-    await this.raw(endpoint, params)
+    const body = await this.raw(endpoint, params)
+    if (/access denied/i.test(body)) {
+      throw new EcammError(`${endpoint}: Ecamm denied the command. Check Remote Control permissions.`, 'permission')
+    }
+    let acknowledgement: unknown
+    try { acknowledgement = JSON.parse(body) } catch { /* report an unknown outcome below */ }
+    if (!Array.isArray(acknowledgement) || acknowledgement.length !== 1 ||
+        !['Done', 'Clicked it!'].includes(acknowledgement[0])) {
+      throw new EcammError(`${endpoint}: unrecognized command response; the outcome is unknown. Check Ecamm before retrying.`, 'parse')
+    }
   }
 }

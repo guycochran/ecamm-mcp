@@ -13,11 +13,13 @@ export interface FakeState {
   scene: string
   mute: Record<string, boolean>
   volume: Record<string, number>
-  overlays: Record<string, Record<string, { title: string; visible: boolean }>>
+  overlays: Record<string, Record<string, { title: string; visible: boolean; text?: string }>>
   live: boolean
   log: { path: string; query: Record<string, string>; headers: IncomingMessage['headers'] }[]
   comments: string[]
   markers: string[]
+  paused: boolean
+  zoomPanel?: string
 }
 
 const SCENES = [
@@ -37,8 +39,8 @@ export function startFake(): Promise<{ server: Server; port: number; state: Fake
     permission: 'Not Found',
     autoApprove: true,
     scene: 'S-ME',
-    mute: { main: false, mic: false, soundeffects: false },
-    volume: { mic: 100, soundeffects: 59 },
+    mute: { main: false, mic: false, soundeffects: false, systemaudio: false },
+    volume: { mic: 100, soundeffects: 59, systemaudio: 100 },
     overlays: {
       'S-ME': { 'O-LT': { title: 'Lower Third Guy', visible: false }, 'O-LOGO': { title: 'OHG Logo', visible: true } },
       'S-HALF': { 'O-LT2': { title: 'Lower Third Guest', visible: false } },
@@ -47,6 +49,7 @@ export function startFake(): Promise<{ server: Server; port: number; state: Fake
     log: [],
     comments: [],
     markers: [],
+    paused: false,
   }
   let pendingScene: string | undefined
 
@@ -69,7 +72,7 @@ export function startFake(): Promise<{ server: Server; port: number; state: Fake
       state.permission = state.autoApprove ? 'Allowed' : 'Pending'
       return json({}) // unapproved getInfo answers {}
     }
-    if (state.permission !== 'Allowed') return json({})
+    if (state.permission !== 'Allowed') return json(path.startsWith('set') ? ['Access denied'] : {})
 
     const bus = q.bus ?? 'main'
     const ov = () => state.overlays[state.scene] ?? {}
@@ -77,7 +80,7 @@ export function startFake(): Promise<{ server: Server; port: number; state: Fake
       case 'getInfo':
         return json({
           ButtonLabel: state.busyUntil && Date.now() < state.busyUntil ? 'Wait' : state.live ? 'Finish' : 'New',
-          PauseButtonLabel: 'None',
+          PauseButtonLabel: state.paused ? 'Resume' : 'Pause',
           CurrentScene: state.scene,
           Viewers: state.live ? '12' : '0',
           PreviewMode: 'no', HidingUI: 'no', LiveDemo: 'no',
@@ -96,10 +99,19 @@ export function startFake(): Promise<{ server: Server; port: number; state: Fake
       case 'getOverlayList':
         return json({ items: Object.entries(ov()).map(([UUID, o]) => ({ UUID, title: o.title, Visible: o.visible })) })
       case 'setOverlay': { const o = ov()[q.id]; if (o) o.visible = !o.visible; return done() }
-      case 'getMute': return json([state.mute[bus] ? 'yes' : 'no'])
-      case 'setMute': state.mute[bus] = !state.mute[bus]; return done()
+      case 'setOverlayText': {
+        const o = ov()[q.id]
+        if (!o) { res.writeHead(404); return res.end('unknown overlay') }
+        o.text = q.text; return done()
+      }
+      case 'getMute': return json([bus in state.mute ? state.mute[bus] ? 'yes' : 'no' : 'N/A'])
+      case 'setMute':
+        if (!(bus in state.mute)) { res.writeHead(400); return res.end('unknown bus') }
+        state.mute[bus] = !state.mute[bus]; return done()
       case 'getVolume': return json([String(state.volume[bus] ?? 'N/A')])
-      case 'setVolume': state.volume[bus] = Number(q.volume); return done()
+      case 'setVolume':
+        if (!(bus in state.volume)) { res.writeHead(400); return res.end('unknown bus') }
+        state.volume[bus] = Number(q.volume); return done()
       case 'getCurrentMode': return json([state.mode ?? 'cam'])
       case 'setMode': setTimeout(() => { state.mode = q.mode }, 250); return done()
       case 'getChannels': return json({ items: [{ title: 'OHG YouTube', UUID: 'CH-YT' }] })
@@ -107,17 +119,23 @@ export function startFake(): Promise<{ server: Server; port: number; state: Fake
       case 'getVideoList': return json({ items: [{ title: '-No recent items-', UUID: '' }] })
       case 'setClickButton': state.live = !state.live; state.busyUntil = Date.now() + 2500; return done()
       case 'setComment': state.comments.push(q.text); return done()
-      case 'setMarker': state.markers.push(q.text ?? ''); return done()
+      case 'setAddMarker': state.markers.push(q.text ?? ''); return done()
+      case 'setClickPause': state.paused = !state.paused; return json(['Clicked it!'])
+      case 'setZoomPanel':
+        if (!['meeting', 'chat', 'participants', 'sharing'].includes(q.panel)) {
+          res.writeHead(400); return res.end('unknown panel')
+        }
+        state.zoomPanel = q.panel; return done()
       case 'getSceneImage': return json({ icon: 'data:image/jpeg;base64,' + Buffer.from([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3, 4, 5, 6, 7]).toString('base64').replace(/(.{4})/g, '$1\r\n') })
       default:
-        if (path.startsWith('set')) return done()
         res.writeHead(404); return res.end('unknown')
     }
   })
-  return new Promise((resolve) =>
+  return new Promise((resolve, reject) => {
+    server.once('error', reject)
     server.listen(0, '127.0.0.1', () => {
       const addr = server.address()
       resolve({ server, port: typeof addr === 'object' && addr ? addr.port : 0, state })
-    }),
-  )
+    })
+  })
 }
