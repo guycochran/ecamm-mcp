@@ -1,6 +1,6 @@
 {
   "name": "ecamm-mcp",
-  "version": "0.2.4",
+  "version": "0.2.3",
   "description": "MCP server for Ecamm Live: control scenes, overlays, audio and go-live from Claude",
   "main": "dist/index.js",
   "scripts": {

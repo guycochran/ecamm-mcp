@@ -33,6 +33,8 @@ const BG = [24, 24, 24] as const
 const FG = [240, 240, 240] as const
 const AMBER = [255, 190, 70] as const
 const SCALE = 2
+const MAX_JPEG_BASE64 = 1_500_000
+const MAX_THUMB_SIDE = 1024
 const PAD = 20
 
 function glyphBit(ch: number, x: number, y: number): boolean {
@@ -103,9 +105,12 @@ function fit(text: string, maxChars: number): string {
 /** Returns a base64 JPEG. One column up to 6 scenes, two columns beyond that. */
 export function buildSceneSheet(cells: SheetCell[], title?: string): string {
   const decoded = cells.map((c) => {
-    if (!c.jpeg) return undefined
+    // Ecamm thumbnails are small (288 px, a few KB). Anything far outside that is skipped
+    // rather than decoded, so one odd response cannot balloon memory.
+    if (!c.jpeg || c.jpeg.length > MAX_JPEG_BASE64) return undefined
     try {
-      const d = jpeg.decode(Buffer.from(c.jpeg, 'base64'), { useTArray: true, maxMemoryUsageInMB: 64 })
+      const d = jpeg.decode(Buffer.from(c.jpeg, 'base64'), { useTArray: true, maxMemoryUsageInMB: 32, maxResolutionInMP: 2 })
+      if (d.width > MAX_THUMB_SIDE || d.height > MAX_THUMB_SIDE) return undefined
       return { width: d.width, height: d.height, data: d.data } as Bitmap
     } catch {
       return undefined

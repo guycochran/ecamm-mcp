@@ -7,6 +7,12 @@ import jpeg from 'jpeg-js'
  * toggle-only commands, a ~400 ms scene switch, and the Not Found -> Pending -> Allowed flow.
  */
 export interface FakeState {
+  /** Force the main button label, e.g. a localized or unexpected one. */
+  buttonLabel?: string
+  /** Called just after a scene lands, to simulate a person or another controller acting mid-sequence. */
+  onSetScene?: (id: string) => void
+  /** setScene for this id answers Done but the scene never changes. */
+  ignoreSceneId?: string
   /** Scenes whose thumbnail Ecamm has redrawn since launch. The rest are stale. */
   redrawn: Record<string, boolean>
   busyUntil?: number
@@ -99,7 +105,7 @@ export function startFake(): Promise<{ server: Server; port: number; state: Fake
     switch (path) {
       case 'getInfo':
         return json({
-          ButtonLabel: state.busyUntil && Date.now() < state.busyUntil ? 'Wait' : state.live ? 'Finish' : 'New',
+          ButtonLabel: state.buttonLabel ?? (state.busyUntil && Date.now() < state.busyUntil ? 'Wait' : state.live ? 'Finish' : 'New'),
           PauseButtonLabel: 'None',
           CurrentScene: state.scene,
           Viewers: state.live ? '12' : '0',
@@ -112,16 +118,20 @@ export function startFake(): Promise<{ server: Server; port: number; state: Fake
         })
       case 'getSceneList': return json({ items: SCENES })
       case 'getCurrentScene': return json([state.scene])
-      case 'setScene':
+      case 'setScene': {
+        const hook = state.onSetScene
+        if (state.ignoreSceneId === q.id) return done() // acknowledged but never lands
         pendingScene = q.id
         setTimeout(() => {
           if (!pendingScene) return
           state.scene = pendingScene
           const id = pendingScene
+          hook?.(id)
           // Like real Ecamm: the thumbnail is redrawn a moment after the scene goes on screen.
           setTimeout(() => { state.redrawn[id] = true }, 300)
         }, 400)
         return done()
+      }
       case 'getOverlayList':
         return json({ items: Object.entries(ov()).map(([UUID, o]) => ({ UUID, title: o.title, Visible: o.visible })) })
       case 'setOverlay': { const o = ov()[q.id]; if (o) o.visible = !o.visible; return done() }

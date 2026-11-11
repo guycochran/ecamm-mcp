@@ -293,6 +293,13 @@ describe('onAirState', () => {
     expect(onAirState('Wait')).toBe('busy')
     expect(onAirState('OK')).toBe('ended')
     expect(onAirState(['Finish'])).toBe('on-air')
+    expect(onAirState('Go Live')).toBe('idle')
+  })
+  it('never calls an unreadable label idle', () => {
+    expect(onAirState('')).toBe('unknown')
+    expect(onAirState(undefined)).toBe('unknown')
+    expect(onAirState('Aufnehmen')).toBe('unknown')
+    expect(onAirState('Newsroom')).toBe('unknown')
   })
 })
 

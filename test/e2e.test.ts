@@ -134,37 +134,101 @@ describe('ecamm-mcp end to end', () => {
     expect(cur.raw.content).toHaveLength(1)
   })
 
-  it('scene sheet visits every scene, returns to the start, and yields one picture', async () => {
-    state.live = false
-    state.busyUntil = 0
-    await client.callTool({ name: 'ecamm_switch_scene', arguments: { scene: 'Me (full)' } })
-    state.redrawn = { 'S-ME': true }
-    const r = await call('ecamm_scene_sheet')
-    expect(r.raw.content[0]).toMatchObject({ type: 'image', mimeType: 'image/jpeg' })
-    const img = jpeg.decode(Buffer.from((r.raw.content[0] as { data: string }).data, 'base64'))
-    expect(img.width).toBeGreaterThan(500)
-    expect(img.height).toBeGreaterThan(4 * 300)
-    const meta = JSON.parse(r.raw.content[1].text!)
-    expect(meta).toMatchObject({ refreshed: true, returnedTo: 'Me (full)' })
-    expect(meta.scenes).toHaveLength(4)
-    expect(meta.scenes.every((s: { current: boolean }) => s.current)).toBe(true)
-    expect(meta.mayBeOutOfDate).toBeUndefined()
-    expect(state.scene).toBe('S-ME')
-    expect(Object.keys(state.redrawn).sort()).toEqual(['S-COMMENT', 'S-HALF', 'S-ME', 'S-STAGE'])
-  }, 30000)
+  describe('scene sheet', () => {
+    const sheet = async (args: Record<string, unknown> = {}) => {
+      const r = await call('ecamm_scene_sheet', args)
+      return { r, meta: JSON.parse(r.raw.content[1].text!) }
+    }
+    const switches = () => state.log.filter((l) => l.path === 'setScene').length
+    const reset = async () => {
+      state.live = false
+      state.busyUntil = 0
+      state.buttonLabel = undefined
+      state.onSetScene = undefined
+      state.ignoreSceneId = undefined
+      await client.callTool({ name: 'ecamm_switch_scene', arguments: { scene: 'Me (full)' } })
+      state.redrawn = { 'S-ME': true }
+    }
+    const byScene = (meta: { scenes: { scene: string; thumbnail: string }[] }) =>
+      Object.fromEntries(meta.scenes.map((s) => [s.scene, s.thumbnail]))
 
-  it('scene sheet does not switch scenes while live', async () => {
-    state.redrawn = { 'S-ME': true }
-    state.live = true
-    const switchesBefore = state.log.filter((l) => l.path === 'setScene').length
-    const r = await call('ecamm_scene_sheet')
-    state.live = false
-    expect(state.log.filter((l) => l.path === 'setScene').length).toBe(switchesBefore)
-    const meta = JSON.parse(r.raw.content[1].text!)
-    expect(meta.refreshed).toBe(false)
-    expect(meta.notRefreshedBecause).toContain('live or recording')
-    expect(meta.mayBeOutOfDate).toEqual(['Guests / Me + Guest Half', 'Guests / Speaker Stage', 'Me w/comment'])
-  }, 20000)
+    it('changes nothing by default and says which pictures may be old', async () => {
+      await reset()
+      const before = switches()
+      const { r, meta } = await sheet()
+      expect(switches()).toBe(before)
+      expect(r.raw.content[0]).toMatchObject({ type: 'image', mimeType: 'image/jpeg' })
+      expect(meta.changedEcamm).toBe(false)
+      expect(byScene(meta)).toEqual({
+        'Me (full)': 'on-screen', 'Guests / Me + Guest Half': 'stored', 'Guests / Speaker Stage': 'stored', 'Me w/comment': 'stored',
+      })
+      expect(meta.scenes.map((s: { number: number }) => s.number)).toEqual([1, 2, 3, 4])
+    })
+
+    it('refresh: true visits every scene, verifies the return, and yields one picture', async () => {
+      await reset()
+      const { r, meta } = await sheet({ refresh: true })
+      const img = jpeg.decode(Buffer.from((r.raw.content[0] as { data: string }).data, 'base64'))
+      expect(img.width).toBeGreaterThan(500)
+      expect(img.height).toBeGreaterThan(4 * 200)
+      expect(meta).toMatchObject({ changedEcamm: true, returnToStartingScene: 'verified', startedOn: 'Me (full)', onScreenNow: 'Me (full)' })
+      expect(byScene(meta)).toEqual({
+        'Me (full)': 'on-screen', 'Guests / Me + Guest Half': 'refreshed', 'Guests / Speaker Stage': 'refreshed', 'Me w/comment': 'refreshed',
+      })
+      expect(state.scene).toBe('S-ME')
+    }, 30000)
+
+    it.each([
+      ['live', () => { state.live = true }, 'live or recording'],
+      ['starting or ending', () => { state.busyUntil = Date.now() + 60000 }, 'starting or ending'],
+      ['an unreadable button label', () => { state.buttonLabel = 'Aufnehmen' }, 'Aufnehmen'],
+    ])('refuses to refresh while %s', async (_name, arrange, reason) => {
+      await reset()
+      arrange()
+      const before = switches()
+      const { meta } = await sheet({ refresh: true })
+      expect(switches()).toBe(before)
+      expect(meta.changedEcamm).toBe(false)
+      expect(meta.refreshRefused).toContain(reason)
+      await reset()
+    }, 20000)
+
+    it('stops without restoring when someone else changes the scene mid-capture', async () => {
+      await reset()
+      let n = 0
+      state.onSetScene = () => { if (++n === 2) setTimeout(() => { state.scene = 'S-COMMENT' }, 200) }
+      const { meta } = await sheet({ refresh: true })
+      state.onSetScene = undefined
+      expect(meta.stoppedEarly).toContain('changed by someone else')
+      expect(meta.returnToStartingScene).toBe('skipped')
+      expect(state.scene).toBe('S-COMMENT') // their choice stands
+      expect(meta.onScreenNow).toBe('Me w/comment')
+      expect(byScene(meta)['Me (full)']).toBe('refreshed') // was on screen when this began
+    }, 30000)
+
+    it('stops without restoring when a broadcast starts mid-capture', async () => {
+      await reset()
+      let n = 0
+      state.onSetScene = () => { if (++n === 1) state.live = true }
+      const { meta } = await sheet({ refresh: true })
+      state.onSetScene = undefined
+      const landedOn = state.scene
+      state.live = false
+      expect(meta.stoppedEarly).toContain('on-air')
+      expect(meta.returnToStartingScene).toBe('skipped')
+      expect(landedOn).not.toBe('S-ME')
+    }, 30000)
+
+    it('reports a failed return instead of claiming it', async () => {
+      await reset()
+      state.ignoreSceneId = 'S-ME'
+      const { meta } = await sheet({ refresh: true })
+      state.ignoreSceneId = undefined
+      expect(meta.returnToStartingScene).toBe('failed')
+      expect(meta.onScreenNow).not.toBe('Me (full)')
+      await reset()
+    }, 30000)
+  })
 
   it('waits for the source mode to land before reporting it', async () => {
     const r = await call('ecamm_set_source_mode', { mode: 'screen' })

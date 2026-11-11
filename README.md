@@ -58,7 +58,7 @@ Type these into Claude. Use your own scene, overlay and sound names.
 
 - "Am I ready to go live?"
 - "What scenes do I have?"
-- "Show me a picture of all my scenes."
+- "Show me a picture of all my scenes." Add "and refresh them" for current pictures; that switches through each scene.
 - "Show me a thumbnail of the Interview scene." (current only for the scene you're on; see [Check your studio from your phone](#check-your-studio-from-your-phone))
 
 **During the show**
@@ -92,7 +92,9 @@ What you need to know:
 - **The Mac has to be awake** with the Claude desktop app and Ecamm both open.
 - **Phone-to-desktop is a Claude feature, not part of this project.** It needs a paid Claude plan. See Claude's guide: [Assign tasks from anywhere](https://support.claude.com/en/articles/13947068-assign-tasks-from-anywhere-in-claude-cowork).
 - **Pictures are stills, not a live view.** Ecamm keeps one small thumbnail per scene and only refreshes it while that scene is on screen. A picture of a scene you're not on can be old.
-- **To get fresh pictures of every scene, it switches through them** and then returns to the scene you were on. It won't do that while you're live or recording; you get the stored pictures instead, with the ones that may be old marked.
+- **By default the scene sheet changes nothing.** You get the pictures Ecamm already has, each marked current or possibly old.
+- **Fresh pictures mean switching through every scene**, so you have to ask for that ("refresh them"). Anything fed from Ecamm, like a virtual camera, a Zoom call or a second display, will see each scene flash by, and scenes that start media will start it. It then returns to the scene you were on and tells you whether that worked.
+- **It won't refresh while you're live, recording, starting or ending**, or when it can't tell. If someone changes the scene or starts a broadcast partway through, it stops and leaves things as that person set them.
 
 ## The pre-show check
 
@@ -147,7 +149,7 @@ Still stuck? [Open an issue](https://github.com/guycochran/ecamm-mcp/issues).
 | `ecamm_preflight` | Pre-show check: ready or not, and what to fix |
 | `ecamm_status` | Live or not, current scene, viewers, preview mode, mutes, volumes, Zoom state |
 | `ecamm_list_scenes`, `ecamm_list_overlays`, `ecamm_list` | Scenes, overlays in the current scene, cameras, videos, sounds, audio filters, profiles, destinations |
-| `ecamm_scene_sheet` | One labeled picture of every scene. Switches through them to get current pictures, then returns to where you were. Won't switch while you're live |
+| `ecamm_scene_sheet` | One labeled picture of every scene, plus a numbered list. Changes nothing by default; on request it switches through scenes to get current pictures, then returns to where you were |
 | `ecamm_thumbnail` | Thumbnail of a scene, overlay or video |
 | `ecamm_switch_scene`, `ecamm_step_scene` | Take a scene live by name, or next / previous |
 | `ecamm_set_overlay` | Show, hide or toggle an overlay |
