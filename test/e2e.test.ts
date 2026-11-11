@@ -135,8 +135,8 @@ describe('ecamm-mcp end to end', () => {
   })
 
   describe('scene sheet', () => {
-    const sheet = async (args: Record<string, unknown> = {}) => {
-      const r = await call('ecamm_scene_sheet', args)
+    const sheet = async (args: { refresh?: boolean } = {}) => {
+      const r = await call(args.refresh ? 'ecamm_refresh_scene_sheet' : 'ecamm_scene_sheet')
       return { r, meta: JSON.parse(r.raw.content[1].text!) }
     }
     const switches = () => state.log.filter((l) => l.path === 'setScene').length
@@ -165,7 +165,7 @@ describe('ecamm-mcp end to end', () => {
       expect(meta.scenes.map((s: { number: number }) => s.number)).toEqual([1, 2, 3, 4])
     })
 
-    it('refresh: true visits every scene, verifies the return, and yields one picture', async () => {
+    it('refresh visits every scene, verifies the return, and yields one picture', async () => {
       await reset()
       const { r, meta } = await sheet({ refresh: true })
       const img = jpeg.decode(Buffer.from((r.raw.content[0] as { data: string }).data, 'base64'))

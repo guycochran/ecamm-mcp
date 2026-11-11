@@ -192,100 +192,111 @@ export function registerTools(server: McpServer, client: EcammClient, opts: { re
     }),
   )
 
+  const MAX_SHEET = 40
+  const MAX_VISITS = 16
+
+  /** Build the labeled picture and its numbered index from whatever thumbnails Ecamm has now. */
+  const sceneSheet = async (scenes: Item[], extra: Record<string, unknown>, walk?: ThumbnailRefresh): Promise<Result> => {
+    const onScreen = await client.currentScene().catch(() => '')
+    const statusOf = (id: string): ThumbnailStatus => {
+      if (id === onScreen) return 'on-screen'
+      const st = walk?.status.get(id) ?? 'stored'
+      // The starting scene was on screen when the walk began, so its picture was current then.
+      return st === 'on-screen' ? 'refreshed' : st
+    }
+    const NOTE: Record<ThumbnailStatus, string | undefined> = {
+      'on-screen': undefined,
+      refreshed: undefined,
+      visited: 'shown, redraw not confirmed',
+      stored: 'stored, may be old',
+    }
+    const cells: SheetCell[] = []
+    for (const [i, s] of scenes.slice(0, MAX_SHEET).entries()) {
+      const img = await client.sceneImage(s.id)
+      const st = statusOf(s.id)
+      cells.push({
+        label: `${i + 1}. ${label(s)}${st === 'on-screen' ? ' (on screen now)' : ''}`,
+        jpeg: img?.mimeType === 'image/jpeg' ? img.data : undefined,
+        note: NOTE[st],
+      })
+    }
+    const now = scenes.find((s) => s.id === onScreen)
+    const summary = {
+      scenes: scenes.map((s, i) => ({ number: i + 1, scene: label(s), thumbnail: statusOf(s.id), ...(i >= MAX_SHEET ? { inPicture: false } : {}) })),
+      thumbnailKey: {
+        'on-screen': 'current: this scene is on screen now',
+        refreshed: 'current: Ecamm was seen redrawing it during this request',
+        visited: 'the scene was put on screen but a redraw was not observed, so the picture may be old',
+        stored: 'whatever Ecamm last saved; age unknown',
+      },
+      onScreenNow: now ? label(now) : 'unknown',
+      ...extra,
+      about: 'Thumbnails are small stills, not a live view. A green outline is Ecamm marking the scene that is on screen. Scene names outside plain ASCII show as "?" in the picture; use the numbers to match them to this list.',
+    }
+    return {
+      content: [
+        { type: 'image', data: buildSceneSheet(cells), mimeType: 'image/jpeg' },
+        { type: 'text', text: JSON.stringify(summary, null, 2) },
+      ],
+    }
+  }
+
   server.registerTool(
     'ecamm_scene_sheet',
     {
       description:
-        'One labeled picture of every scene, with a numbered text index, for "show me my scenes" or checking a studio remotely. ' +
-        'By default it changes nothing: it uses the thumbnails Ecamm already has, which are only current for the scene on screen, and says which may be old. ' +
-        'refresh: true gets current pictures by putting each scene on screen in turn, then returning to the starting scene. That changes what Ecamm is showing, ' +
-        'and anything fed from Ecamm (a virtual camera, a Zoom call, a second display) will see every scene flash by, and scenes that start media will start it. ' +
-        'Only pass refresh: true when the person has asked for fresh pictures and knows that. It is refused while live, recording, starting, ending, when the state cannot be read, and in read-only mode. ' +
+        'One labeled picture of every scene, with a numbered text index, for "show me my scenes" or checking a studio remotely. Changes nothing. ' +
+        'It uses the thumbnails Ecamm already has, which are only current for the scene on screen, and says which may be old. ' +
+        'For current pictures of every scene the person must ask for a refresh (ecamm_refresh_scene_sheet), which switches scenes. ' +
         'The person often cannot see tool images directly: if you can send or attach files, pass this picture on to them.',
-      inputSchema: {
-        refresh: z.boolean().optional().describe('Default false: change nothing, use stored thumbnails. true: switch through every scene to redraw them (see description).'),
-      },
-      annotations: ann('show', 'Picture of every scene'),
+      inputSchema: {},
+      annotations: ann('read', 'Picture of every scene'),
     },
-    wrap('read', async ({ refresh }: { refresh?: boolean }) => {
-      const MAX_VISITS = 16
-      const MAX_SHEET = 40
-      const info = await client.info(true)
-      const state = onAirState(info.ButtonLabel)
-      const scenes = await client.scenes()
-      const startId = (await client.currentScene().catch(() => '')) || String(info.CurrentScene ?? '')
-      const start = scenes.find((s) => s.id === startId)
-
-      let refused: string | undefined
-      if (refresh) {
-        if (opts.readOnly) refused = 'ecamm-mcp is in read-only mode'
-        else if (state === 'on-air') refused = 'Ecamm is live or recording, and switching scenes would go out on air'
-        else if (state === 'busy') refused = 'Ecamm is in the middle of starting or ending a broadcast'
-        else if (state === 'unknown') refused = `Ecamm's main button reads "${scalar(info.ButtonLabel)}", so it is not clear whether it is on air`
-        else if (!start) refused = 'the scene on screen could not be identified, so there would be no way to return to it'
-      }
-
-      let walk: ThumbnailRefresh | undefined
-      if (refresh && !refused) {
-        walk = await client.refreshSceneThumbnails(scenes.slice(0, MAX_VISITS).map((s) => s.id), startId)
-      }
-      // Re-read: after a walk that stopped early, or a restore that failed, this is not the start scene.
-      const onScreen = (await client.currentScene().catch(() => '')) || startId
-
-      const statusOf = (id: string): ThumbnailStatus => {
-        if (id === onScreen) return 'on-screen'
-        const st = walk?.status.get(id) ?? 'stored'
-        // The starting scene was on screen when this began, so its picture was current then.
-        return st === 'on-screen' ? 'refreshed' : st
-      }
-      const NOTE: Record<ThumbnailStatus, string | undefined> = {
-        'on-screen': undefined,
-        refreshed: undefined,
-        visited: 'shown, redraw not confirmed',
-        stored: 'stored, may be old',
-      }
-      const cells: SheetCell[] = []
-      for (const [i, s] of scenes.slice(0, MAX_SHEET).entries()) {
-        const img = await client.sceneImage(s.id)
-        const st = statusOf(s.id)
-        cells.push({
-          label: `${i + 1}. ${label(s)}${st === 'on-screen' ? ' (on screen now)' : ''}`,
-          jpeg: img?.mimeType === 'image/jpeg' ? img.data : undefined,
-          note: NOTE[st],
-        })
-      }
-      const summary = {
-        scenes: scenes.map((s, i) => ({ number: i + 1, scene: label(s), thumbnail: statusOf(s.id), ...(i >= MAX_SHEET ? { inPicture: false } : {}) })),
-        thumbnailKey: {
-          'on-screen': 'current: this scene is on screen now',
-          refreshed: 'current: Ecamm was seen redrawing it during this request',
-          visited: 'the scene was put on screen but a redraw was not observed, so the picture may be old',
-          stored: 'whatever Ecamm last saved; age unknown',
-        },
-        changedEcamm: Boolean(walk),
-        ...(refresh && refused ? { refreshRefused: refused } : {}),
-        ...(walk
-          ? {
-              ...(walk.stopped ? { stoppedEarly: walk.stopped } : {}),
-              returnToStartingScene: walk.restore,
-              ...(walk.restoreNote ? { returnNote: walk.restoreNote } : {}),
-              startedOn: start ? label(start) : startId,
-            }
-          : {}),
-        onScreenNow: label(scenes.find((s) => s.id === onScreen) ?? { id: onScreen, title: onScreen || 'unknown' }),
-        ...(scenes.length > MAX_VISITS && walk ? { note: `Only the first ${MAX_VISITS} scenes are visited per request.` } : {}),
-        about: 'Thumbnails are small stills, not a live view. A green outline is Ecamm marking the scene that is on screen. Scene names outside plain ASCII show as "?" in the picture; use the numbers to match them to this list.',
-      }
-      return {
-        content: [
-          { type: 'image', data: buildSceneSheet(cells), mimeType: 'image/jpeg' },
-          { type: 'text', text: JSON.stringify(summary, null, 2) },
-        ],
-      }
-    }),
+    wrap('read', async () => sceneSheet(await client.scenes(), { changedEcamm: false })),
   )
 
   // ================= SHOW =================
+
+  server.registerTool(
+    'ecamm_refresh_scene_sheet',
+    {
+      description:
+        'Get CURRENT pictures of every scene by putting each scene on screen in turn, then returning to the starting scene, and return the labeled sheet. ' +
+        'This changes what Ecamm is showing: anything fed from Ecamm (a virtual camera, a Zoom call, a second display) sees every scene flash by, and scenes that start media will start it. ' +
+        'Only use it when the person has asked for fresh pictures and understands that; otherwise use ecamm_scene_sheet, which changes nothing. ' +
+        'Refused while live, recording, starting, ending, or when the state cannot be read. Stops without restoring if someone else changes the scene or starts a broadcast partway through. ' +
+        'Reports whether the return to the starting scene was verified.',
+      inputSchema: {},
+      annotations: ann('show', 'Refresh scene pictures'),
+    },
+    wrap('show', async () => {
+      const info = await client.info(true)
+      const state = onAirState(info.ButtonLabel)
+      const scenes = await client.scenes()
+      const startId = await client.currentScene()
+      const start = scenes.find((s) => s.id === startId)
+      let refused: string | undefined
+      if (state === 'on-air') refused = 'Ecamm is live or recording, and switching scenes would go out on air'
+      else if (state === 'busy') refused = 'Ecamm is in the middle of starting or ending a broadcast'
+      else if (state === 'unknown') refused = `Ecamm's main button reads "${scalar(info.ButtonLabel)}", so it is not clear whether it is on air`
+      else if (!start) refused = 'the scene on screen could not be identified, so there would be no way to return to it'
+      if (refused) return sceneSheet(scenes, { changedEcamm: false, refreshRefused: refused })
+
+      const walk = await client.refreshSceneThumbnails(scenes.slice(0, MAX_VISITS).map((s) => s.id), startId)
+      return sceneSheet(
+        scenes,
+        {
+          changedEcamm: true,
+          startedOn: label(start!),
+          returnToStartingScene: walk.restore,
+          ...(walk.restoreNote ? { returnNote: walk.restoreNote } : {}),
+          ...(walk.stopped ? { stoppedEarly: walk.stopped } : {}),
+          ...(scenes.length > MAX_VISITS ? { note: `Only the first ${MAX_VISITS} scenes are visited per request.` } : {}),
+        },
+        walk,
+      )
+    }),
+  )
 
   server.registerTool(
     'ecamm_switch_scene',

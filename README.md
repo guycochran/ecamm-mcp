@@ -149,7 +149,8 @@ Still stuck? [Open an issue](https://github.com/guycochran/ecamm-mcp/issues).
 | `ecamm_preflight` | Pre-show check: ready or not, and what to fix |
 | `ecamm_status` | Live or not, current scene, viewers, preview mode, mutes, volumes, Zoom state |
 | `ecamm_list_scenes`, `ecamm_list_overlays`, `ecamm_list` | Scenes, overlays in the current scene, cameras, videos, sounds, audio filters, profiles, destinations |
-| `ecamm_scene_sheet` | One labeled picture of every scene, plus a numbered list. Changes nothing by default; on request it switches through scenes to get current pictures, then returns to where you were |
+| `ecamm_scene_sheet` | One labeled picture of every scene, plus a numbered list, from the thumbnails Ecamm already has. Changes nothing |
+| `ecamm_refresh_scene_sheet` | Same sheet with current pictures: switches through every scene, then returns to where you were and says whether that worked |
 | `ecamm_thumbnail` | Thumbnail of a scene, overlay or video |
 | `ecamm_switch_scene`, `ecamm_step_scene` | Take a scene live by name, or next / previous |
 | `ecamm_set_overlay` | Show, hide or toggle an overlay |
