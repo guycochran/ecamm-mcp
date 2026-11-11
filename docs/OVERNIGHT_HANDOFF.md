@@ -28,7 +28,7 @@ Validation of the combined commit on the Intel Mac:
 - Recording folder: `/Users/macbookpro/Projects/ecamm-mcp/recordings`.
 - Media inspector: `/usr/local/bin/ffprobe`.
 - Both values were saved through Claude's extension UI and read back from disk. Later, that settings file was observed rewritten at 23:27:46 without `userConfig`; the cause was not established. Both fields were restored and saved again, and the extension was toggled off and back on.
-- A fresh MCP process using the **installed extension entry point and its actual saved settings** returned the folder as available, the inspector as available, and `metadataInspectionConfigured: true`. This does not prove an existing Claude chat has refreshed its cached tools. That chat temporarily lost Ecamm tool discovery after the restart.
+- A fresh MCP process using the **installed extension entry point and its actual saved settings** returned the folder as available, the inspector as available, and `metadataInspectionConfigured: true`. This does not prove an existing Claude chat has refreshed its cached tools. That chat temporarily lost Ecamm tool discovery after the restart, then reported the older empty-folder result again. The settings file was rechecked and still retained both values. The discrepancy between the app-connected tool and a fresh installed-server process remains unresolved; do not call the existing chat configuration verified.
 - Ecamm's own recording-save destination has **not** been changed or verified. The completion event has **not** been assigned in Ecamm.
 - `/recordings/` and `/.local/` are Git-ignored. No real media was committed, moved, renamed, or deleted.
 
