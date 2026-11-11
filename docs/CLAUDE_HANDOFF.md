@@ -40,6 +40,26 @@ The project now ignores `/recordings/` and `/.local/`. A generated helper is at 
 
 Shortcuts currently reports **scripting actions are disabled**. An unassigned draft named **Ecamm Recording Complete - Setup Pending** exists with an unconfigured Run Shell Script action. Do not describe it as installed/working. The generated script is ready, but enabling scripting requires Guy's approval while awake. After approval: finish the action (stdin input), preserve any existing Broadcast Finishes automation, assign it in Ecamm, and test a local recording with Guy watching. Ecamm's own recording destination has not been changed. No live starts, recording starts, releases, or main merges overnight.
 
+## Claude update 9, November 11, 2026 (1:50 PM Pacific)
+
+Feature freeze from here, at Guy's request relayed by Codex: wrap up as is for a few friends to evaluate. Friends-beta package is Codex's, built from `3883c2f`. No runtime change in this update.
+
+Second Apple silicon report, relayed by Guy from a new chat on the M1 iMac after quitting and reopening Claude. Not observed by Claude in this session. Read-only and plan-only; nothing on air. The build was not restated in this report; the earlier one gave `3883c2f`.
+
+| Check on the M1 | Reported result |
+| --- | --- |
+| Four `ecamm_list` calls at once, first thing after restart (cameras, sounds, profiles, destinations) | All passed, no timeouts. The four timeouts right after install remain a single unexplained occurrence |
+| `ecamm_preflight`, intent `record` | `no_problems_seen`, with the main button reading "New" |
+| `ecamm_scene_sheet` | 7 scenes, one current picture, the rest marked possibly old. Two scenes share the name "New Scene" |
+| `ecamm_prepare_session`, `record_only` | Returned its report and three manual checks; guest audio mute state could not be read |
+| `ecamm_plan_cue` (scene, wait 1 s) | `ok: true`. Planned, not run |
+
+Also reported: three sounds show a length of 0 seconds; the two placeholder cameras again.
+
+**Defect found from this report, NOT fixed in this branch or the beta package:** `ecamm_preflight` with intent `record` said no problems while the button read "New". "New" means Ecamm is in a broadcast mode, where `ecamm_start_stop` refuses `record`. So a tester can be told "no problems seen" for a recording that the tool would then refuse to start. Nothing unsafe follows from it: the start is refused, and in read-only mode nothing starts at all. A fix (a `Mode` warning when a stated intent does not match the mode the idle button shows, with a unit test; simulator only) is parked on branch `claude/preflight-mode-check` at `5b41a33`, outside the feature freeze. Tell beta testers: the pre-show check does not check Ecamm's Mode menu.
+
+**Checked, no change needed:** two scenes with the same name. `resolveItem` already refuses a name that matches more than one scene, lists the matches with their ids, and asks for the id. Simulator-level reading of the code; not tried on that Mac.
+
 ## Claude update 8, November 11, 2026 (1:20 PM Pacific)
 
 Apple silicon results, relayed by Guy from a Claude Code session on the M1 iMac. Claude in this session did not observe any of it. No on-air action was taken there; on-air tools were dry runs only.

@@ -28,7 +28,7 @@ You need a Mac with Ecamm Live and the [Claude desktop app](https://claude.ai/do
 3. Open Ecamm Live, then ask Claude: **"What's my Ecamm status?"**
 4. Ecamm Live asks for permission. Click **Allow**. Done.
 
-If you change the extension's settings later, quit Claude completely (Cmd+Q) and reopen it. Turning the extension off and on was not enough in our testing.
+**After updating or changing settings:** quit Claude completely (Cmd+Q), reopen it, and start a **new chat**. Turning the extension off and on was not enough in our testing. A chat that was open before the update keeps the old tool list: new tools are missing, and new options on old tools are ignored without an error.
 
 **Checking the download (optional).** Releases from 0.3.0 onward include `SHA256SUMS.txt`. In Terminal, in the folder with the download, run `shasum -a 256 ecamm-mcp.mcpb` and compare the result with the line for that file. A checksum shows the file is the one attached to the release. It is not a code signature.
 
@@ -49,7 +49,7 @@ Piping a script from the internet into your shell means trusting it. You can [re
 
 Then quit Claude completely (Cmd+Q), open it again, and ask: **"What's my Ecamm status?"**
 
-Run the same line again any time to update.
+Run the same line again any time to update, then quit Claude, reopen it and start a new chat.
 
 ## The one click that matters
 
