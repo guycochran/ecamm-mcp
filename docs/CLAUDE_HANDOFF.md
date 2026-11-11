@@ -40,6 +40,31 @@ The project now ignores `/recordings/` and `/.local/`. A generated helper is at 
 
 Shortcuts currently reports **scripting actions are disabled**. An unassigned draft named **Ecamm Recording Complete - Setup Pending** exists with an unconfigured Run Shell Script action. Do not describe it as installed/working. The generated script is ready, but enabling scripting requires Guy's approval while awake. After approval: finish the action (stdin input), preserve any existing Broadcast Finishes automation, assign it in Ecamm, and test a local recording with Guy watching. Ecamm's own recording destination has not been changed. No live starts, recording starts, releases, or main merges overnight.
 
+## Claude update 7, November 11, 2026 (12:15 AM Pacific)
+
+No code changes. Evidence only. Codex's own account is in `docs/OVERNIGHT_HANDOFF.md` on draft PR #11 (`fbc4e73`).
+
+**Observed by Claude, through the app-connected session (read-only `ecamm_recording_status`):**
+
+| Time (Pacific) | folders | inspector | inbox | build identity in reply |
+| --- | --- | --- | --- | --- |
+| about 11:06 PM, 11:14 PM, 11:18 PM | `[]` | unavailable, then available after ffprobe was installed | `not_created` | none |
+| about 11:56 PM | `[]` | available (evermeet ffprobe) | `exists` | none |
+| about 12:01 AM, after Codex restored settings and toggled the extension | `[]` | available | `exists` | none |
+
+`metadataInspectionConfigured` was `false` every time. The missing identity block means the server answering this session predates `c9570b9`; it is believed to be test build 3 (`0b151e9`), installed at 11:05 PM. The Ecamm tools dropped out of this session at about 11:58 PM and returned a minute or two later.
+
+**Reported by Codex, not seen by Claude:**
+- The extension settings file was rewritten at 23:27:46 with no `userConfig`, after an earlier successful save. What rewrote it is not established. Both fields were restored through the UI, saved, and the extension toggled off and on.
+- After Claude's 12:01 AM empty result, the saved settings still held `recording_folder=/Users/macbookpro/Projects/ecamm-mcp/recordings` and `ffprobe=/usr/local/bin/ffprobe`.
+- A fresh SDK process using the installed entry point with those saved settings returned the folder available and `metadataInspectionConfigured: true`.
+- Combined `b5dbb4f` on the Intel Mac: 224 source tests, 71 packaged tests, archive check with 37 tools; CI green.
+- Shortcuts "Allow Running Scripts" was already checked; Codex did not change it. The pending Shortcut ("Ecamm Recording Complete - Setup Pending", not assigned in Ecamm) captured 3 synthetic completion events, but the Shortcuts CLI runner did not exit within the bounded test. Synthetic events and files were removed.
+
+**Conclusion so far:** saved settings and installed code work in a fresh process. The server attached to this long-running chat session did not show the settings. Unresolved which of these explains it: a stale server process for this session, or settings not passed to it.
+
+**For Guy, in a fresh chat session:** run "check my recording setup" and confirm the folder shows. Then one short real recording to test the actual Broadcast Finishes event, which has never fired for real. Also still open: `go_live` from `New` returned unknown and did not start a broadcast.
+
 ## Claude update 6, November 10, 2026 (11:55 PM Pacific)
 
 Merged Codex's stable head `e658f81` (build identity, cancellation in scene refresh) as `20a442c`. No conflicts.
