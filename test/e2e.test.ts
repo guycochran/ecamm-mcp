@@ -1,3 +1,4 @@
+import jpeg from 'jpeg-js'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import { mkdtempSync } from 'node:fs'
@@ -124,6 +125,46 @@ describe('ecamm-mcp end to end', () => {
     expect(r.raw.content[0]).toMatchObject({ type: 'image', mimeType: 'image/jpeg' })
     expect(r.raw.content[0].data).toMatch(/^[A-Za-z0-9+/]+={0,2}$/)
   })
+
+  it('warns when a thumbnail is for a scene that is not on screen', async () => {
+    const r = await call('ecamm_thumbnail', { kind: 'scene', ref: 'Speaker Stage' })
+    expect(r.raw.content[0]).toMatchObject({ type: 'image' })
+    expect(r.raw.content[1].text).toContain('may be out of date')
+    const cur = await call('ecamm_thumbnail', { kind: 'scene', ref: 'Me (full)' })
+    expect(cur.raw.content).toHaveLength(1)
+  })
+
+  it('scene sheet visits every scene, returns to the start, and yields one picture', async () => {
+    state.live = false
+    state.busyUntil = 0
+    await client.callTool({ name: 'ecamm_switch_scene', arguments: { scene: 'Me (full)' } })
+    state.redrawn = { 'S-ME': true }
+    const r = await call('ecamm_scene_sheet')
+    expect(r.raw.content[0]).toMatchObject({ type: 'image', mimeType: 'image/jpeg' })
+    const img = jpeg.decode(Buffer.from((r.raw.content[0] as { data: string }).data, 'base64'))
+    expect(img.width).toBeGreaterThan(500)
+    expect(img.height).toBeGreaterThan(4 * 300)
+    const meta = JSON.parse(r.raw.content[1].text!)
+    expect(meta).toMatchObject({ refreshed: true, returnedTo: 'Me (full)' })
+    expect(meta.scenes).toHaveLength(4)
+    expect(meta.scenes.every((s: { current: boolean }) => s.current)).toBe(true)
+    expect(meta.mayBeOutOfDate).toBeUndefined()
+    expect(state.scene).toBe('S-ME')
+    expect(Object.keys(state.redrawn).sort()).toEqual(['S-COMMENT', 'S-HALF', 'S-ME', 'S-STAGE'])
+  }, 30000)
+
+  it('scene sheet does not switch scenes while live', async () => {
+    state.redrawn = { 'S-ME': true }
+    state.live = true
+    const switchesBefore = state.log.filter((l) => l.path === 'setScene').length
+    const r = await call('ecamm_scene_sheet')
+    state.live = false
+    expect(state.log.filter((l) => l.path === 'setScene').length).toBe(switchesBefore)
+    const meta = JSON.parse(r.raw.content[1].text!)
+    expect(meta.refreshed).toBe(false)
+    expect(meta.notRefreshedBecause).toContain('live or recording')
+    expect(meta.mayBeOutOfDate).toEqual(['Guests / Me + Guest Half', 'Guests / Speaker Stage', 'Me w/comment'])
+  }, 20000)
 
   it('waits for the source mode to land before reporting it', async () => {
     const r = await call('ecamm_set_source_mode', { mode: 'screen' })

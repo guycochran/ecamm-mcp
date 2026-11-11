@@ -1,6 +1,6 @@
 {
   "name": "ecamm-mcp",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "description": "MCP server for Ecamm Live: control scenes, overlays, audio and go-live from Claude",
   "main": "dist/index.js",
   "scripts": {
@@ -15,6 +15,7 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.32.2",
     "bonjour-service": "^1.4.4",
+    "jpeg-js": "^0.4.4",
     "zod": "^4.6.7"
   },
   "devDependencies": {

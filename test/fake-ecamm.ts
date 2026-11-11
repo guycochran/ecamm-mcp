@@ -1,4 +1,5 @@
 import { createServer, type IncomingMessage, type Server } from 'node:http'
+import jpeg from 'jpeg-js'
 
 /**
  * Minimal stand-in for Ecamm Live's Remote API, shaped like the real responses captured in
@@ -6,6 +7,8 @@ import { createServer, type IncomingMessage, type Server } from 'node:http'
  * toggle-only commands, a ~400 ms scene switch, and the Not Found -> Pending -> Allowed flow.
  */
 export interface FakeState {
+  /** Scenes whose thumbnail Ecamm has redrawn since launch. The rest are stale. */
+  redrawn: Record<string, boolean>
   busyUntil?: number
   mode?: string
   permission: 'Not Found' | 'Pending' | 'Allowed' | 'Denied'
@@ -32,11 +35,31 @@ const SCENES = [
   { title: 'Me w/comment', UUID: 'S-COMMENT', Children: [] },
 ]
 
+/** 96x96 letterboxed still: gray if stale, a per-scene color once redrawn, green outline while on screen. */
+function sceneJpeg(id: string, state: FakeState): string {
+  const n = 96
+  const data = Buffer.alloc(n * n * 4)
+  const hue = [...id].reduce((a, c) => a + c.charCodeAt(0), 0)
+  const color = state.redrawn[id] ? [60 + (hue * 7) % 180, 60 + (hue * 13) % 180, 60 + (hue * 29) % 180] : [90, 90, 90]
+  const current = state.scene === id
+  for (let y = 0; y < n; y++) {
+    for (let x = 0; x < n; x++) {
+      const o = (y * n + x) * 4
+      const bar = y < 21 || y >= 75
+      const edge = !bar && current && (y < 25 || y >= 71 || x < 4 || x >= n - 4)
+      const c = bar ? [0, 0, 0] : edge ? [100, 255, 80] : color
+      data[o] = c[0]; data[o + 1] = c[1]; data[o + 2] = c[2]; data[o + 3] = 255
+    }
+  }
+  return Buffer.from(jpeg.encode({ data, width: n, height: n }, 85).data).toString('base64')
+}
+
 export function startFake(): Promise<{ server: Server; port: number; state: FakeState }> {
   const state: FakeState = {
     permission: 'Not Found',
     autoApprove: true,
     scene: 'S-ME',
+    redrawn: { 'S-ME': true },
     mute: { main: false, mic: false, soundeffects: false },
     volume: { mic: 100, soundeffects: 59 },
     overlays: {
@@ -91,7 +114,13 @@ export function startFake(): Promise<{ server: Server; port: number; state: Fake
       case 'getCurrentScene': return json([state.scene])
       case 'setScene':
         pendingScene = q.id
-        setTimeout(() => { if (pendingScene) state.scene = pendingScene }, 400)
+        setTimeout(() => {
+          if (!pendingScene) return
+          state.scene = pendingScene
+          const id = pendingScene
+          // Like real Ecamm: the thumbnail is redrawn a moment after the scene goes on screen.
+          setTimeout(() => { state.redrawn[id] = true }, 300)
+        }, 400)
         return done()
       case 'getOverlayList':
         return json({ items: Object.entries(ov()).map(([UUID, o]) => ({ UUID, title: o.title, Visible: o.visible })) })
@@ -108,7 +137,7 @@ export function startFake(): Promise<{ server: Server; port: number; state: Fake
       case 'setClickButton': state.live = !state.live; state.busyUntil = Date.now() + 2500; return done()
       case 'setComment': state.comments.push(q.text); return done()
       case 'setMarker': state.markers.push(q.text ?? ''); return done()
-      case 'getSceneImage': return json({ icon: 'data:image/jpeg;base64,' + Buffer.from([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3, 4, 5, 6, 7]).toString('base64').replace(/(.{4})/g, '$1\r\n') })
+      case 'getSceneImage': return json({ icon: 'data:image/jpg;base64,' + sceneJpeg(q.id, state).replace(/(.{76})/g, '$1\r\n') })
       default:
         if (path.startsWith('set')) return done()
         res.writeHead(404); return res.end('unknown')

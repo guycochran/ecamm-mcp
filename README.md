@@ -58,6 +58,7 @@ Type these into Claude. Use your own scene, overlay and sound names.
 
 - "Am I ready to go live?"
 - "What scenes do I have?"
+- "Show me a picture of all my scenes."
 - "Show me a thumbnail of the Interview scene."
 
 **During the show**
@@ -128,6 +129,7 @@ Still stuck? [Open an issue](https://github.com/guycochran/ecamm-mcp/issues).
 | `ecamm_preflight` | Pre-show check: ready or not, and what to fix |
 | `ecamm_status` | Live or not, current scene, viewers, preview mode, mutes, volumes, Zoom state |
 | `ecamm_list_scenes`, `ecamm_list_overlays`, `ecamm_list` | Scenes, overlays in the current scene, cameras, videos, sounds, audio filters, profiles, destinations |
+| `ecamm_scene_sheet` | One labeled picture of every scene. Switches through them to get current pictures, then returns to where you were. Won't switch while you're live |
 | `ecamm_thumbnail` | Thumbnail of a scene, overlay or video |
 | `ecamm_switch_scene`, `ecamm_step_scene` | Take a scene live by name, or next / previous |
 | `ecamm_set_overlay` | Show, hide or toggle an overlay |
@@ -219,6 +221,8 @@ Releases: bump the version in `package.json`, `src/version.ts` and `mcpb/manifes
 Against a real Ecamm Live so far, including an unlisted YouTube test broadcast: discovery, the Allow dialog, status, the pre-show check, all lists, thumbnails, scene switch and step, overlays, mute, volume, sound effects, camera, source mode, preview mode, the Zoom panel, going live and ending, a public chat comment, the comment overlay, splitting the recording, and the dry-run guard on Go Live, profile switch and Zoom end. Not yet run against a real Ecamm: pausing a recording, audio filters and video playback. If something behaves differently on your setup, please open an issue.
 
 ## Credits
+
+The scene sheet's label font is a bitmap rendered from DejaVu Sans Mono Bold, used under the DejaVu Fonts license. JPEG handling is jpeg-js (BSD-3-Clause).
 
 API reference and response shapes from [bitfocus/companion-module-ecamm-live](https://github.com/bitfocus/companion-module-ecamm-live) (MIT), including its `docs/ecamm-live-remote-api-v4.4.md`.
 

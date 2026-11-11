@@ -1,6 +1,7 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { z } from 'zod'
-import { AUDIO_BUSES, EcammClient, preflight, resolveItem, scalar, summarizeInfo, yes, type Item } from './client.js'
+import { buildSceneSheet, type SheetCell } from './sheet.js'
+import { AUDIO_BUSES, EcammClient, onAirState, preflight, resolveItem, scalar, summarizeInfo, yes, type Item } from './client.js'
 import { EcammError } from './http.js'
 
 type Content = { type: 'text'; text: string } | { type: 'image'; data: string; mimeType: string }
@@ -180,7 +181,83 @@ export function registerTools(server: McpServer, client: EcammClient, opts: { re
       const ep = ({ scene: 'getSceneImage', overlay: 'getOverlayImage', video: 'getVideoImage' } as const)[kind]
       const img = await client.image(ep, id)
       if (!img) return text(`No thumbnail available for ${kind} ${ref}`)
-      return { content: [{ type: 'image', data: img.data, mimeType: img.mimeType }] }
+      const content: Result['content'] = [{ type: 'image', data: img.data, mimeType: img.mimeType }]
+      if (kind === 'scene' && id !== (await client.currentScene().catch(() => id))) {
+        content.push({
+          type: 'text',
+          text: 'This scene is not on screen right now, so this thumbnail may be out of date. Ecamm only refreshes a thumbnail while its scene is on screen. Tell the person, or use ecamm_scene_sheet for fresh pictures.',
+        })
+      }
+      return { content }
+    }),
+  )
+
+  server.registerTool(
+    'ecamm_scene_sheet',
+    {
+      description:
+        'One labeled picture of EVERY scene, for "show me my scenes", "what does my setup look like", or checking a studio remotely. ' +
+        'By default it briefly switches through each scene so every picture is current, then returns to the scene it started on. ' +
+        'It never switches scenes while Ecamm is live or recording, or in read-only mode; then it returns stored thumbnails and marks which may be out of date. ' +
+        'Pass refresh: false to skip switching. The person often cannot see tool images directly: if you can send or attach files, pass this picture on to them.',
+      inputSchema: { refresh: z.boolean().optional().describe('Default true. false = do not switch scenes, use stored thumbnails.') },
+      annotations: ann('show', 'Picture of every scene'),
+    },
+    wrap('read', async ({ refresh }: { refresh?: boolean }) => {
+      const MAX_VISITS = 16
+      const info = await client.info(true)
+      const state = onAirState(info.ButtonLabel)
+      const scenes = await client.scenes()
+      const startId = String(info.CurrentScene ?? '') || (await client.currentScene().catch(() => ''))
+      const start = scenes.find((s) => s.id === startId)
+
+      let whyNot: string | undefined
+      if (refresh === false) whyNot = 'refresh was turned off'
+      else if (opts.readOnly) whyNot = 'ecamm-mcp is in read-only mode'
+      else if (state === 'on-air') whyNot = 'Ecamm is live or recording, and switching scenes would go out on air'
+      else if (state === 'busy') whyNot = 'Ecamm is in the middle of starting or ending a broadcast'
+
+      const fresh = new Set<string>(startId ? [startId] : [])
+      if (!whyNot) {
+        try {
+          for (const s of scenes.slice(0, MAX_VISITS)) {
+            if (s.id === startId) continue
+            if (await client.visitSceneForThumbnail(s.id)) fresh.add(s.id)
+          }
+        } finally {
+          if (startId) await client.switchScene(startId)
+        }
+      }
+
+      const cells: SheetCell[] = []
+      for (const s of scenes) {
+        const img = await client.sceneImage(s.id)
+        cells.push({
+          label: label(s) + (s.id === startId ? ' (on screen now)' : ''),
+          jpeg: img?.mimeType === 'image/jpeg' ? img.data : undefined,
+          note: fresh.has(s.id) ? undefined : 'may be out of date',
+        })
+      }
+      const stale = scenes.filter((s) => !fresh.has(s.id)).map(label)
+      return {
+        content: [
+          { type: 'image', data: buildSceneSheet(cells), mimeType: 'image/jpeg' },
+          {
+            type: 'text',
+            text: JSON.stringify(
+              {
+                scenes: scenes.map((s) => ({ scene: label(s), onScreenNow: s.id === startId, current: fresh.has(s.id) })),
+                refreshed: !whyNot,
+                ...(whyNot ? { notRefreshedBecause: whyNot } : { returnedTo: start ? label(start) : startId }),
+                ...(stale.length ? { mayBeOutOfDate: stale } : {}),
+                note: 'Thumbnails are small stills, not a live view. The green outline is Ecamm marking the scene that is on screen.',
+              },
+              null,
+              2,
+            ),
+          },
+        ],
+      }
     }),
   )
 

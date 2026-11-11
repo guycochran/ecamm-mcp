@@ -398,6 +398,31 @@ export class EcammClient {
     return { before, after }
   }
 
+  /** A scene's stored thumbnail. Ecamm only refreshes it while that scene is on screen. */
+  sceneImage(id: string): Promise<EcammImage | undefined> {
+    return this.image('getSceneImage', id).catch(() => undefined)
+  }
+
+  /**
+   * Put a scene on screen and wait for Ecamm to redraw its thumbnail. Returns false if
+   * the switch never landed. The thumbnail changes when the scene goes current (Ecamm
+   * outlines it), so a change is the signal; then allow a beat for the picture itself.
+   */
+  async visitSceneForThumbnail(id: string, maxWaitMs = 3500): Promise<boolean> {
+    const before = (await this.sceneImage(id))?.data
+    if (!(await this.switchScene(id))) return false
+    const deadline = Date.now() + maxWaitMs
+    while (Date.now() < deadline) {
+      await sleep(350)
+      const now = (await this.sceneImage(id))?.data
+      if (now && now !== before) {
+        await sleep(900)
+        break
+      }
+    }
+    return true
+  }
+
   async image(endpoint: 'getSceneImage' | 'getOverlayImage' | 'getVideoImage', id: string): Promise<EcammImage | undefined> {
     const payload = await this.get<unknown>(endpoint, { id })
     let raw = ''
