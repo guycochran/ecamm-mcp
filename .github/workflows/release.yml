@@ -1,6 +1,8 @@
 name: Release
-# Push a tag like v0.2.0 and this builds the extension and the single-file server and
-# attaches them to a GitHub release. The README and install.sh download from the latest release.
+# Push a tag like v0.3.0 and this builds the extension and the single-file server, writes
+# SHA256SUMS.txt, and attaches all three to a DRAFT GitHub release. Nothing is public until
+# a person publishes the draft. The README and install.sh download from the latest
+# published release.
 on:
   push:
     tags: ['v*']
@@ -23,7 +25,23 @@ jobs:
       - name: Tag must match package.json
         run: test "v$(node -p "require('./package.json').version")" = "$GITHUB_REF_NAME"
       - run: npm run package
-      - name: Publish
+      - run: node scripts/verify-extension.mjs
+      - name: Checksums
+        working-directory: release
+        run: |
+          sha256sum ecamm-mcp.mcpb ecamm-mcp.cjs > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+          sha256sum --check SHA256SUMS.txt
+      - name: Attach to a draft release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" release/ecamm-mcp.mcpb release/ecamm-mcp.cjs --title "ecamm-mcp $GITHUB_REF_NAME" --generate-notes
+        run: |
+          notes="docs/release-notes/$GITHUB_REF_NAME.md"
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            # A release for this tag already exists (for example a hand-written draft). Add the files, change nothing else.
+            gh release upload "$GITHUB_REF_NAME" release/ecamm-mcp.mcpb release/ecamm-mcp.cjs release/SHA256SUMS.txt --clobber
+          elif [ -f "$notes" ]; then
+            gh release create "$GITHUB_REF_NAME" release/ecamm-mcp.mcpb release/ecamm-mcp.cjs release/SHA256SUMS.txt --draft --title "ecamm-mcp $GITHUB_REF_NAME" --notes-file "$notes"
+          else
+            gh release create "$GITHUB_REF_NAME" release/ecamm-mcp.mcpb release/ecamm-mcp.cjs release/SHA256SUMS.txt --draft --title "ecamm-mcp $GITHUB_REF_NAME" --generate-notes
+          fi
