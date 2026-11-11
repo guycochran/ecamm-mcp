@@ -6,6 +6,8 @@ Updated November 10, 2026 (America/Los_Angeles).
 
 Branch `claude/broadcast-intent` now also contains `codex/ecamm-recording-workflows` (#10, head `e7b2330`), merged cleanly onto `b62ec15` as `e30f6e1`. Both registrars and the `recording-complete` / `recording-doctor` CLI routing are intact, as are the mutation queue, getInfo pacing, the scene sheet and explicit intent. Not merged to main, not tagged, not released.
 
+Commits in this update: `e30f6e1` (merge of #10), `99fa46e` (preflight, markers, cues, demos, this handoff). Bundle run against `release/ecamm-mcp.cjs` built from `99fa46e`: 58 passed in 3 files.
+
 ### New real-Ecamm results (iMac Pro, Intel, Ecamm 4.6.2 per RESEARCH.md; test build of `b62ec15`)
 
 | Check | Result |
@@ -47,7 +49,7 @@ Sanitized copies are in `test/fixtures`.
 ### Validation (simulator)
 
 - `npm run build`: passed. `npm test`: **187 passed** in 7 files.
-- `npm run package`: passed. Bundle run: `ECAMM_MCP_ENTRY="$PWD/release/ecamm-mcp.cjs" npx vitest run test/e2e.test.ts test/recording-e2e.test.ts test/workflow-e2e.test.ts`, result recorded in the PR.
+- `npm run package`: passed. Bundle run: `ECAMM_MCP_ENTRY="$PWD/release/ecamm-mcp.cjs" npx vitest run test/e2e.test.ts test/recording-e2e.test.ts test/workflow-e2e.test.ts`, **58 passed** in 3 files.
 
 ### Still owed, in order
 
