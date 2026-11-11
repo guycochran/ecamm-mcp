@@ -4,7 +4,9 @@ Community project, best effort. Not affiliated with Ecamm.
 
 ## 0.3.0 (unreleased)
 
-Tested with Ecamm Live 4.6.2 on an Intel iMac Pro. "Real" below means seen on that Mac; everything else passes against a simulator only.
+Not released. A candidate until the gates in [docs/VERIFICATION_MATRIX.md](docs/VERIFICATION_MATRIX.md) pass.
+
+Tested with Ecamm Live 4.6.2 on an Intel iMac Pro (macOS 15.8.2, read November 11, 2026). "Real" below means seen on that Mac; everything else passes against a simulator only.
 
 ### Changed
 - `ecamm_start_stop` takes an `intent` (`go_live`, `record`, `end`) and never clicks without one. A repeated request does nothing, `go_live` is refused in Record Only mode and `record` in broadcast mode, and the outcome is reported as verified, failed or unknown. Real: record, repeat, end, both refusals. Not confirmed: go live from the `New` button.
@@ -26,12 +28,13 @@ Tested with Ecamm Live 4.6.2 on an Intel iMac Pro. "Real" below means seen on th
 - MCP cancellation stops queued changes, cue waits and scene refresh. Simulator only.
 - Build identity (`--build-info`, and a `server` block in status replies).
 - Advanced recording-file tools, off until a recording folder is set: `ecamm_recording_status`, `ecamm_prepare_session`, `ecamm_browse_recordings`, `ecamm_list_recordings`, `ecamm_inspect_recording`, `ecamm_read_markers`, `ecamm_prepare_edit_handoff`, plus the `recording-complete`, `recording-doctor` and `recording-shortcut` commands. Only `ecamm_recording_status` has run through Claude on a real Mac.
-- `SECURITY.md`, issue forms, and GitHub Discussions for questions.
+- `SECURITY.md` and issue forms.
 
 ### Known gaps
 - Go live from this version is unconfirmed (one attempt reported unknown).
 - Untested on a real Ecamm: video playback, audio filters, Profile switch, Zoom sharing and meeting controls, system audio and guest buses, a remote Mac, guest layout controls (not implemented).
-- The macOS versions of the test Macs were not recorded.
+- An install on an Apple silicon Mac from the README is owed. Earlier sessions did not record the macOS version.
+- The recording completion Shortcut is experimental: the Shortcuts runner did not exit in testing, and it has not fired from a real recording.
 
 ## 0.2.3 and earlier
 

@@ -6,8 +6,7 @@ body:
     attributes:
       value: |
         Community project, best effort. Not affiliated with Ecamm.
-        ecamm-mcp can only do what Ecamm's Remote Control API offers. It **cannot** read live chat, receive events from Ecamm, create or edit scenes, report for certain that you are live, or get the recording file's path from the API. Requests for those are labeled `upstream-ecamm` and closed, since nothing here can change them.
-        Every field below is required.
+        ecamm-mcp can only do what Ecamm's Remote Control API offers. Today that API cannot read live chat, send events, create or edit scenes, report for certain that you are live, or return the recording file's path. You can still ask for those: such requests get the `upstream-ecamm` label and stay on record, but nothing in this project can deliver them.
   - type: textarea
     id: want
     attributes:
@@ -25,10 +24,11 @@ body:
   - type: textarea
     id: doctor
     attributes:
-      label: Doctor output
+      label: Doctor output, or the exact error
       description: |
         Terminal install: run `~/.ecamm-mcp/ecamm-mcp doctor` and paste what it prints.
-        Extension install: ask Claude "What's my Ecamm status?" and paste the full reply.
+        Extension install: ask Claude "What's my Ecamm status?" and paste the full reply, including the server block.
+        If you can't get either (for example the install itself failed), paste the exact error message and say at which step it appeared.
       render: text
     validations:
       required: true
@@ -43,20 +43,13 @@ body:
     id: macos
     attributes:
       label: macOS version and Mac type
-      placeholder: "macOS 15.1, Apple silicon"
+      placeholder: "macOS 15.8.2, Intel"
     validations:
       required: true
   - type: input
     id: client
     attributes:
       label: MCP client and version
-      placeholder: "Claude desktop 1.2.3, extension"
+      placeholder: "Claude desktop 5.1231.2, extension"
     validations:
       required: true
-  - type: checkboxes
-    id: checks
-    attributes:
-      label: Before you submit
-      options:
-        - label: I read "What Ecamm's API can't do" in the README, and this isn't one of those.
-          required: true

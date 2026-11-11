@@ -5,16 +5,17 @@ body:
   - type: markdown
     attributes:
       value: |
-        Community project, best effort. Not affiliated with Ecamm. **No live-show support.**
-        Every field below is required. Reports without them will be closed, because we can't reproduce anything without them.
+        Community project, best effort. Not affiliated with Ecamm. There is no live-show support: replies can take days.
+        The details below are what make a report reproducible. Fill in what you can.
         Please remove stream keys, guest links and anything private before pasting.
   - type: textarea
     id: doctor
     attributes:
-      label: Doctor output
+      label: Doctor output, or the exact error
       description: |
-        Terminal install: run `~/.ecamm-mcp/ecamm-mcp doctor` and paste everything it prints.
+        Terminal install: run `~/.ecamm-mcp/ecamm-mcp doctor` and paste what it prints.
         Extension install: ask Claude "What's my Ecamm status?" and paste the full reply, including the server block.
+        If you can't get either (for example the install itself failed), paste the exact error message and say at which step it appeared.
       render: text
     validations:
       required: true
@@ -31,7 +32,7 @@ body:
     attributes:
       label: macOS version and Mac type
       description: Apple menu > About This Mac
-      placeholder: "macOS 15.1, Apple silicon"
+      placeholder: "macOS 15.8.2, Intel"
     validations:
       required: true
   - type: input
@@ -39,21 +40,20 @@ body:
     attributes:
       label: MCP client and version
       description: The app you use ecamm-mcp from, and whether you installed the extension or used Terminal
-      placeholder: "Claude desktop 1.2.3, extension"
+      placeholder: "Claude desktop 5.1231.2, extension"
     validations:
       required: true
   - type: input
     id: version
     attributes:
       label: ecamm-mcp version
+      description: Leave blank if the install failed before you could tell
       placeholder: "0.3.0"
-    validations:
-      required: true
   - type: textarea
     id: steps
     attributes:
       label: Steps to reproduce
-      description: What you typed, in order, what you expected, and what happened instead. Say whether Ecamm was idle, live or recording.
+      description: What you typed, in order, what you expected, and what happened instead. Say whether Ecamm was idle, live or recording at the time.
       placeholder: |
         1. Ecamm idle, Record Only mode
         2. Typed "..."
@@ -61,12 +61,3 @@ body:
         4. Got ...
     validations:
       required: true
-  - type: checkboxes
-    id: checks
-    attributes:
-      label: Before you submit
-      options:
-        - label: I am not in the middle of a live show. I understand there is no live-show support.
-          required: true
-        - label: I read "What Ecamm's API can't do" in the README, and this isn't one of those.
-          required: true
