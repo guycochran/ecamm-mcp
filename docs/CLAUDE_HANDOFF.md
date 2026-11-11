@@ -4,7 +4,7 @@ Updated November 10, 2026 (America/Los_Angeles).
 
 ## Claude update, November 10, 2026 (evening)
 
-Branch `claude/broadcast-intent` = `main` + `codex/ecamm-api-alignment` (#8) + `scene-sheet` (#7), reconciled, plus sections A and B below. Draft PR opened against `main`. Everything in this update is **simulator-only**. No real Ecamm control was operated for it.
+Branch `claude/broadcast-intent` = `main` + `codex/ecamm-api-alignment` (#8) + `scene-sheet` (#7), reconciled, plus sections A and B below. Draft PR opened against `main`. The code sections below are simulator-tested. A real-Ecamm session followed and is recorded separately under "Real-Ecamm session".
 
 ### Review of #8
 
@@ -39,18 +39,41 @@ Branch `claude/broadcast-intent` = `main` + `codex/ecamm-api-alignment` (#8) + `
 
 ### Validation on this branch
 
-- `npm run build`: passed. `npm test`: **136 passed**. `npm run package`: passed. `ECAMM_MCP_ENTRY=release/ecamm-mcp.cjs npx vitest run test/e2e.test.ts`: **44 passed**, now really against the bundle.
+- `npm run build`: passed. `npm test`: **138 passed**. `npm run package`: passed. `ECAMM_MCP_ENTRY=release/ecamm-mcp.cjs npx vitest run test/e2e.test.ts`: **45 passed**, now really against the bundle.
 - Version left at 0.2.3. No tag, no release.
 
-### Real-Ecamm checks still owed (Guy, with a test build)
+### Real-Ecamm session, November 10, 2026, about 10:20 PM Pacific
 
-1. What does a set command's raw body look like? One command settles the acknowledgement question.
-2. Marker in a Record Only recording: does `setAddMarker` write the marker file?
-3. `pause` then `resume` in Record Only: button labels before and after.
-4. Overlay text on a disposable overlay, including a non-ASCII name.
-5. `go_live` twice on an unlisted broadcast: second one must not end it. Then `end`.
-6. `record` while in broadcast mode, and `go_live` in Record Only: both must refuse.
-7. Scene sheet, then refresh: pictures current, return verified.
+Run by Claude through the installed test build of this branch (commit `0bf8df6`), on the iMac Pro (Intel), Ecamm in Record Only mode, idle at the start. App version per RESEARCH.md: 4.6.2. These are observations from a real Ecamm and are kept apart from the simulator results above.
+
+| Check | Result on real Ecamm |
+| --- | --- |
+| Acknowledgements | `setMute`, `setScene`, `setOverlay`, `setOverlayText`, `setClickButton`, `setAddMarker`, `setClickPause`, `setMode`, `setPreviewMode` were accepted. Whether they arrive bare or as JSON was not captured, since both are accepted |
+| `setVolume` acknowledgement | **Not `Done`.** Body was `["100"]`, the resulting level. The strict check rejected it as an unknown outcome. Fixed after the session with an endpoint-specific rule; that fix is simulator-tested only |
+| Overlay text | Worked, including `Renée ✓ MCP test`. Rendered in the scene thumbnail. The overlay list then showed the new text as the overlay's title, so the list is a readback for text overlays. Restored to `Live` |
+| No intent, `confirm: true` | Not clicked. Reported button `Record`, state idle |
+| `go_live` in Record Only | Refused, not clicked |
+| `record` | Clicked `Record`; outcome verified; button `Finish` |
+| `record` again while recording | Not clicked |
+| Marker (`setAddMarker`) | Accepted during the recording. **Marker file not yet inspected** |
+| `pause` | Clicked `Pause`; button became `Resume`; verified |
+| `pause` again | Not clicked |
+| `resume` | Clicked `Resume`; button became `Pause`; verified |
+| Refresh scene sheet while recording | Refused; no scene switches; stored sheet returned |
+| `end` | Clicked `Finish`; outcome verified; button `OK` (state `ended`) |
+| `end` again | Not clicked |
+| Refresh scene sheet in `ended` state | All four other scenes `refreshed`; return to starting scene verified |
+| Preview Mode | Toggled on. Three further toggles, sent while the end-of-recording summary (`OK`) was showing, did not turn it off. **Left on.** Cause unknown; not caused by this branch's changes, the tool code is unchanged |
+
+Not run on a real Ecamm: `go_live` twice and `end` in broadcast mode, `record` refused in broadcast mode, system audio, Zoom sharing, a mid-capture intervention, a failed or stuck start.
+
+### Real-Ecamm checks still owed
+
+1. Guy: open the marker `.txt` from the 10:21 PM recording and look for `MCP marker via setAddMarker`.
+2. Guy: dismiss the `OK` summary, then see whether Preview Mode turns off from Ecamm and from the tool.
+3. Broadcast mode, privacy Unlisted: `record` must refuse; `go_live` twice must not end it; then `end`.
+4. Re-run `ecamm_set_volume` on the next build to confirm the `setVolume` fix.
+5. System audio mute and volume; Zoom sharing panel in a test meeting.
 
 ### Next
 

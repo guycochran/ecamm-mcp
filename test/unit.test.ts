@@ -412,6 +412,13 @@ describe('command acknowledgements', () => {
   it('accepts Done and Clicked it! bare, quoted, or in a one-element array', () => {
     for (const body of ['Done', 'Done\n', '"Done"', '["Done"]', '["Clicked it!"]', 'Clicked it!']) expect(isAcknowledgement(body)).toBe(true)
   })
+  it('accepts a level from setVolume only, as observed on a real Ecamm', () => {
+    expect(isAcknowledgement('["100"]', 'setVolume')).toBe(true)
+    expect(isAcknowledgement('["37.5"]', 'setVolume')).toBe(true)
+    expect(isAcknowledgement('["100"]', 'setMute')).toBe(false)
+    expect(isAcknowledgement('["100"]')).toBe(false)
+    expect(isAcknowledgement('["loud"]', 'setVolume')).toBe(false)
+  })
   it('rejects anything else, including empty and multi-element replies', () => {
     for (const body of ['', '[]', '["Done","Done"]', '{"ok":true}', 'Access Denied', '<html>', '["Nope"]']) expect(isAcknowledgement(body)).toBe(false)
   })

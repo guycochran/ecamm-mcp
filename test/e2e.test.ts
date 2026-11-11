@@ -108,7 +108,15 @@ describe('ecamm-mcp end to end', () => {
     expect(state.overlays['S-ME']['O-LT']).toMatchObject({ text: value, visible: before })
     const missing = await call('ecamm_set_overlay_text', { overlay: 'missing overlay', text: value })
     expect(missing.isError).toBe(true)
-  })
+  }, 15000)
+
+  it('verifies overlay text when Ecamm lists the overlay under its new text', async () => {
+    await call('ecamm_switch_scene', { scene: 'Me w/comment' })
+    const r = await call('ecamm_set_overlay_text', { overlay: 'Live', text: 'Renée ✓' })
+    expect(r.json).toMatchObject({ accepted: true, verified: true, text: 'Renée ✓' })
+    await call('ecamm_set_overlay_text', { overlay: 'Renée ✓', text: 'Live' })
+    await call('ecamm_switch_scene', { scene: 'Me (full)' })
+  }, 15000)
 
   describe('going live, recording and ending by intent', () => {
     const clicks = () => state.log.filter((l) => l.path === 'setClickButton').length

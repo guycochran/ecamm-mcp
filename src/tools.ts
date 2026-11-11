@@ -349,8 +349,23 @@ export function registerTools(server: McpServer, client: EcammClient, opts: { re
     wrap('show', async ({ overlay, text: value }: { overlay: string; text: string }) => {
       const ov = resolveItem(await client.overlays(), overlay, 'overlay')
       await client.set('setOverlayText', { id: ov.id, text: value })
-      return text({ overlay: ov.title, id: ov.id, text: value, accepted: true, verified: false,
-        note: 'Ecamm accepted the text update. Check the rendered overlay; the Remote API does not provide text readback.' })
+      // On a real Ecamm (4.6.2) a text overlay's title in the overlay list is its text, so
+      // the list is a readback. Other overlay kinds may keep their own title: then this
+      // stays unverified rather than failed.
+      let titleNow: string | undefined
+      const deadline = Date.now() + 1500
+      while (Date.now() < deadline) {
+        titleNow = (await client.overlays()).find((o) => o.id === ov.id)?.title
+        if (titleNow === value) break
+        await new Promise((r) => setTimeout(r, 150))
+      }
+      const verified = titleNow === value
+      return text({
+        overlay: ov.title, id: ov.id, text: value, accepted: true, verified,
+        note: verified
+          ? 'Ecamm now lists this overlay with the new text.'
+          : 'Ecamm accepted the text update, but the overlay list does not show the new text. That is normal for overlays that keep their own name; check the rendered overlay.',
+      })
     }),
   )
 

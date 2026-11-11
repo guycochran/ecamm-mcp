@@ -34,7 +34,7 @@ export interface FakeState {
   scene: string
   mute: Record<string, boolean>
   volume: Record<string, number>
-  overlays: Record<string, Record<string, { title: string; visible: boolean; text?: string }>>
+  overlays: Record<string, Record<string, { title: string; visible: boolean; text?: string; isText?: boolean }>>
   live: boolean
   log: { path: string; query: Record<string, string>; headers: IncomingMessage['headers']; at: number }[]
   comments: string[]
@@ -85,6 +85,8 @@ export function startFake(): Promise<{ server: Server; port: number; state: Fake
     overlays: {
       'S-ME': { 'O-LT': { title: 'Lower Third Guy', visible: false }, 'O-LOGO': { title: 'OHG Logo', visible: true } },
       'S-HALF': { 'O-LT2': { title: 'Lower Third Guest', visible: false } },
+      // A plain text overlay: on a real Ecamm its title in the list is its text.
+      'S-COMMENT': { 'O-TXT': { title: 'Live', visible: true, isText: true } },
     },
     live: false,
     log: [],
@@ -153,7 +155,9 @@ export function startFake(): Promise<{ server: Server; port: number; state: Fake
       case 'setOverlayText': {
         const o = ov()[q.id]
         if (!o) { res.writeHead(404); return res.end('unknown overlay') }
-        o.text = q.text; return done()
+        o.text = q.text
+        if (o.isText) o.title = q.text
+        return done()
       }
       case 'getMute': return json([bus in state.mute ? state.mute[bus] ? 'yes' : 'no' : 'N/A'])
       case 'setMute':
@@ -162,7 +166,8 @@ export function startFake(): Promise<{ server: Server; port: number; state: Fake
       case 'getVolume': return json([String(state.volume[bus] ?? 'N/A')])
       case 'setVolume':
         if (!(bus in state.volume)) { res.writeHead(400); return res.end('unknown bus') }
-        state.volume[bus] = Number(q.volume); return done()
+        state.volume[bus] = Number(q.volume)
+        return json([String(state.volume[bus])]) // real Ecamm answers with the resulting level, not Done
       case 'getCurrentMode': return json([state.mode ?? 'cam'])
       case 'setMode': setTimeout(() => { state.mode = q.mode }, 250); return done()
       case 'getChannels': return json({ items: [{ title: 'OHG YouTube', UUID: 'CH-YT' }] })
