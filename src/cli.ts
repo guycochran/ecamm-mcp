@@ -9,7 +9,7 @@ import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { EcammClient, type Permission } from './client.js'
 import { envValue } from './env.js'
-import { VERSION } from './version.js'
+import { BUILD_INFO, VERSION } from './version.js'
 
 const say = (s = '') => console.log(s)
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
@@ -251,6 +251,7 @@ const HELP = `ecamm-mcp ${VERSION}  MCP server for Ecamm Live
   ecamm-mcp doctor     check the connection (paste the output when asking for help)
   ecamm-mcp recording-doctor  check local recording folders, inbox, and ffprobe
   ecamm-mcp recording-shortcut  print a configured Shortcuts shell action
+  ecamm-mcp --build-info  identify the installed test bundle without contacting Ecamm
   ecamm-mcp recording-complete [--path-stdin]  save a completion event from stdin
   ecamm-mcp uninstall  disconnect from Claude desktop
   ecamm-mcp --version
@@ -264,6 +265,7 @@ export async function runCli(args: string[]): Promise<number> {
     case 'doctor': return doctor()
     case 'uninstall': return uninstall()
     case '--version': case '-v': say(VERSION); return 0
+    case '--build-info': say(JSON.stringify(BUILD_INFO, null, 2)); return 0
     case '--help': case '-h': case 'help': say(HELP); return 0
     default:
       console.error(`Unknown command "${cmd}".\n`)

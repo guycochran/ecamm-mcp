@@ -2,6 +2,18 @@
 
 Updated November 10, 2026 (America/Los_Angeles).
 
+## Codex scene-refresh cancellation follow-up
+
+Extended MCP cancellation into `refreshSceneThumbnails`: check before/after reads and thumbnail waits, skip further scene switches, and do not automatically restore after cancellation. Already-sent switches may finish. Two additional unit checks cover cancellation before any work and after thumbnail lookup, and a real MCP transport test cancels after the first scene switch and confirms the next queued command runs with no additional switches/restoration. Both cue and refresh cancellation integration cases pass against the packaged server.
+
+CI for `b821838` (the 218-test source suite before identity/refresh follow-ups) completed successfully across all jobs. Later commits remain review-branch development work, not a release or installed extension update.
+
+## Codex build identification
+
+Added `--build-info` plus a `server` identity block in both Ecamm status and recording diagnostics. Packaged builds embed the repository commit and whether relevant source/package files were changed; unbundled TypeScript and non-Git source archives report unknown provenance. This helps distinguish same-version test packages and diagnose stale installed builds. It is diagnostic labeling, not a signature. The actual extension archive verifier checks that CLI and MCP report the same build identity.
+
+The full combined suite through `b821838` passed **218 tests in 12 files** with real generated media. The subsequent identity-only change passed TypeScript build, packaging, and extracted archive verification (37 tools, matching build identity, generated Shortcut action, receipt capture/listing). A dirty test build correctly reported its pre-commit head with `dirty: true`; rebuild after committing to produce an identified clean package.
+
 ## Codex cancellation review
 
 The shared tool wrapper now passes the MCP request's AbortSignal into cue execution and checks cancellation again when a queued mutation reaches execution. A cancelled queued request sends nothing. Cues stop before later steps, recheck after overlay resolution, and interrupt waits when the caller sends MCP cancellation. In-flight actions can still finish; there is no rollback or standalone cancel tool, and a UI Stop button is effective only if that client actually sends protocol cancellation.

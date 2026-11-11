@@ -615,10 +615,12 @@ export class EcammClient {
    * changed: someone picked another scene or profile, or a broadcast or recording started.
    * Restoring over a person's own change would be worse than leaving it.
    */
-  async refreshSceneThumbnails(sceneIds: string[], startId: string, maxWaitMs = 3500): Promise<ThumbnailRefresh> {
+  async refreshSceneThumbnails(sceneIds: string[], startId: string, maxWaitMs = 3500, signal?: AbortSignal): Promise<ThumbnailRefresh> {
     const status = new Map<string, ThumbnailStatus>([[startId, 'on-screen']])
     let expected = startId
+    const cancelled = (): ThumbnailRefresh => ({ status, stopped: 'The caller cancelled the refresh.', restore: 'skipped', restoreNote: 'No further scene changes were started. An in-flight change may still finish; check the current scene. Nothing was restored automatically.' })
     const blocker = async (): Promise<string | undefined> => {
+      if (signal?.aborted) return 'The caller cancelled the refresh.'
       const cur = await this.currentScene().catch(() => undefined)
       if (cur === undefined) return 'Ecamm stopped answering'
       if (cur !== expected) return 'the scene was changed by someone else during capture'
@@ -628,17 +630,23 @@ export class EcammClient {
     }
 
     for (const id of sceneIds) {
+      if (signal?.aborted) return cancelled()
       if (id === startId) continue
       const stop = await blocker()
+      if (signal?.aborted) return cancelled()
       if (stop) return { status, stopped: stop, restore: 'skipped', restoreNote: 'Left as found, so a change someone else made is not overwritten.' }
       const before = (await this.sceneImage(id))?.data
+      if (signal?.aborted) return cancelled()
       if (!(await this.switchScene(id))) continue // never landed; expected is unchanged and re-checked next loop
       expected = id
       status.set(id, 'visited')
       const deadline = Date.now() + maxWaitMs
       while (Date.now() < deadline) {
+        if (signal?.aborted) return cancelled()
         await sleep(350)
+        if (signal?.aborted) return cancelled()
         const now = (await this.sceneImage(id))?.data
+        if (signal?.aborted) return cancelled()
         if (now && now !== before) {
           status.set(id, 'refreshed')
           await sleep(900) // the outline appears first; give the picture itself a beat
@@ -647,8 +655,10 @@ export class EcammClient {
       }
     }
 
+    if (signal?.aborted) return cancelled()
     if (expected === startId) return { status, restore: 'not-needed' }
     const stop = await blocker()
+    if (signal?.aborted) return cancelled()
     if (stop) return { status, stopped: stop, restore: 'skipped', restoreNote: 'Left as found, so a change someone else made is not overwritten.' }
     await this.switchScene(startId)
     const back = (await this.currentScene().catch(() => undefined)) === startId

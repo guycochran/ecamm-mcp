@@ -6,6 +6,7 @@ import { homedir, hostname } from 'node:os'
 import { extname, isAbsolute, join, relative, sep } from 'node:path'
 import { z } from 'zod'
 import { envValue } from './env.js'
+import { BUILD_INFO } from './version.js'
 
 const eventSchema = z.object({
   version: z.literal(1), id: z.string().regex(/^[a-f0-9]{64}$/),
@@ -311,7 +312,7 @@ export async function recordingDoctor(opts: RecordingOptions) {
     if ((err as NodeJS.ErrnoException).code !== 'ENOENT') inboxStatus = 'unavailable'
   }
   return {
-    machine: hostname(), folders, inspector, inbox: { path: opts.inbox, status: inboxStatus },
+    server: BUILD_INFO, machine: hostname(), folders, inspector, inbox: { path: opts.inbox, status: inboxStatus },
     metadataInspectionConfigured: inspector.status === 'available' && folders.some(f => f.status === 'available'),
     completionHook: 'not_verified',
     limitations: ['This checks configuration only, not recording quality, folder write permission, or whether Ecamm has the completion Shortcut enabled.',

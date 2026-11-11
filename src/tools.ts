@@ -4,6 +4,7 @@ import { buildSceneSheet, type SheetCell } from './sheet.js'
 import { cueStepSchema, MAX_CUE_STEPS, planCue, runCue, type CueStep } from './cue.js'
 import { AUDIO_BUSES, apiAudioBus, EcammClient, onAirState, planMainButton, preflight, resolveItem, scalar, summarizeInfo, yes, type BroadcastIntent, type Item, type ThumbnailRefresh, type ThumbnailStatus } from './client.js'
 import { EcammError } from './http.js'
+import { BUILD_INFO } from './version.js'
 
 type Content = { type: 'text'; text: string } | { type: 'image'; data: string; mimeType: string }
 type Result = { content: Content[]; isError?: boolean }
@@ -78,6 +79,7 @@ export function registerTools(server: McpServer, client: EcammClient, opts: { re
       const scene = scenes.find((s) => s.id === cur)
       return text({
         connectedTo: client.target.host,
+        server: BUILD_INFO,
         machine: client.target.instance?.hostname,
         approved: true,
         currentScene: scene ? { id: scene.id, title: label(scene) } : cur,
@@ -276,11 +278,11 @@ export function registerTools(server: McpServer, client: EcammClient, opts: { re
         'This changes what Ecamm is showing: anything fed from Ecamm (a virtual camera, a Zoom call, a second display) sees every scene flash by, and scenes that start media will start it. ' +
         'Only use it when the person has asked for fresh pictures and understands that; otherwise use ecamm_scene_sheet, which changes nothing. ' +
         'Refused while live, recording, starting, ending, or when the state cannot be read. Stops without restoring if someone else changes the scene or starts a broadcast partway through. ' +
-        'Reports whether the return to the starting scene was verified.',
+        'Reports whether the return to the starting scene was verified. If the MCP client sends cancellation, no further scene changes or automatic restoration are started; an in-flight change may finish. Check the current scene.',
       inputSchema: {},
       annotations: ann('show', 'Refresh scene pictures'),
     },
-    wrap('show', async () => {
+    wrap('show', async (_args, signal) => {
       const info = await client.info(true)
       const state = onAirState(info.ButtonLabel)
       const scenes = await client.scenes()
@@ -293,7 +295,7 @@ export function registerTools(server: McpServer, client: EcammClient, opts: { re
       else if (!start) refused = 'the scene on screen could not be identified, so there would be no way to return to it'
       if (refused) return sceneSheet(scenes, { changedEcamm: false, refreshRefused: refused })
 
-      const walk = await client.refreshSceneThumbnails(scenes.slice(0, MAX_VISITS).map((s) => s.id), startId)
+      const walk = await client.refreshSceneThumbnails(scenes.slice(0, MAX_VISITS).map((s) => s.id), startId, 3500, signal)
       return sceneSheet(
         scenes,
         {

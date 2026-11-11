@@ -32,6 +32,11 @@ try {
   assert.equal(JSON.parse(await readFile(join(dirname(entry), 'package.json'), 'utf8')).type, 'commonjs')
   const version = execFileSync(process.execPath, [entry, '--version'], { encoding: 'utf8', timeout: 10000 }).trim()
   assert.equal(version, manifest.version, 'Archive server and manifest versions differ')
+  const buildInfo = JSON.parse(execFileSync(process.execPath, [entry, '--build-info'], { encoding: 'utf8', timeout: 10000 }))
+  assert.equal(buildInfo.version, version)
+  assert.equal(buildInfo.packaging, 'bundle')
+  assert(buildInfo.commit === null || /^[a-f0-9]{40,64}$/.test(buildInfo.commit))
+  assert(buildInfo.dirty === null || typeof buildInfo.dirty === 'boolean')
 
   const media = join(temp, 'recordings')
   await mkdir(media)
@@ -56,6 +61,7 @@ try {
     return JSON.parse(response.content[0].text)
   }
   const status = await call('ecamm_recording_status')
+  assert.deepEqual(status.server, buildInfo, 'MCP diagnostics and packaged CLI identify different builds')
   assert.deepEqual(status.folders, [])
   assert.equal(status.metadataInspectionConfigured, false)
   assert.equal(status.completionHook, 'not_verified')

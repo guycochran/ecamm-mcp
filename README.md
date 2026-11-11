@@ -95,6 +95,7 @@ What you need to know:
 - **By default the scene sheet changes nothing.** You get the pictures Ecamm already has, each marked current or possibly old.
 - **Fresh pictures mean switching through every scene**, so you have to ask for that ("refresh them"). Anything fed from Ecamm, like a virtual camera, a Zoom call or a second display, will see each scene flash by, and scenes that start media will start it. It then returns to the scene you were on and tells you whether that worked.
 - **It won't refresh while you're live, recording, starting or ending**, or when it can't tell. If someone changes the scene or starts a broadcast partway through, it stops and leaves things as that person set them.
+- **MCP cancellation stops further scene changes during a refresh.** An in-flight switch may still finish. It does not restore the starting scene after cancellation; check which scene is on screen.
 
 ## The pre-show check
 
@@ -264,6 +265,8 @@ npm run setup        # connect Claude desktop and bring up the Allow dialog
 npm test
 npm run package      # builds release/ecamm-mcp.mcpb and release/ecamm-mcp.cjs
 ```
+
+To identify a test package, run `node release/ecamm-mcp.cjs --build-info` or ask for recording status. Bundles report their source commit and whether relevant source files had local changes when packaged. Plain `tsc` builds and source archives without Git report unavailable provenance rather than guessing. This is a troubleshooting label, not a signature or security attestation. A development package can share the published version number; compare its commit when checking which fixes are installed.
 
 Releases: bump the version in `package.json`, `src/version.ts` and `mcpb/manifest.json`, then push a tag like `v0.2.0`. GitHub Actions builds the extension and the single-file server and attaches them to the release.
 
