@@ -54,3 +54,18 @@ it('skips a cancelled request when it reaches the mutation queue and lets the ne
   expect(r.isError).toBe(true); expect(r.content[0].text).toContain('cancelled before execution')
   expect(await client.exclusive(async () => 'next request')).toBe('next request')
 })
+it('does not start scene refresh after cancellation', async () => {
+  const client = new EcammClient({ host: '127.0.0.1:1' })
+  const controller = new AbortController(); controller.abort()
+  const r = await client.refreshSceneThumbnails(['one', 'two'], 'one', 3500, controller.signal)
+  expect(r.restore).toBe('skipped'); expect(r.stopped).toContain('cancelled')
+})
+it('cancels refresh after reading a thumbnail without switching scenes', async () => {
+  const client = new EcammClient({ host: '127.0.0.1:1' }), controller = new AbortController()
+  client.currentScene = vi.fn(async () => 'one')
+  client.info = vi.fn(async () => ({ ButtonLabel: 'New' }))
+  client.sceneImage = vi.fn(async () => { controller.abort(); return undefined })
+  client.switchScene = vi.fn(async () => true)
+  const r = await client.refreshSceneThumbnails(['one', 'two'], 'one', 3500, controller.signal)
+  expect(r.restore).toBe('skipped'); expect(client.switchScene).not.toHaveBeenCalled()
+})

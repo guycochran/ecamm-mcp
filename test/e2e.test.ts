@@ -607,3 +607,19 @@ it('honors MCP cancellation during a cue wait and releases the mutation queue', 
     expect(state.log.slice(before).filter(r => r.path === 'setVolume')).toHaveLength(1)
   } finally { controller.abort() }
 })
+
+it('honors MCP cancellation during scene refresh without additional switches or restoration', async () => {
+  state.live = false; state.buttonLabel = 'New'; state.onSetScene = undefined; state.ignoreSceneId = undefined
+  const before = state.log.length
+  const controller = new AbortController()
+  const cancelled = client.callTool({ name: 'ecamm_refresh_scene_sheet', arguments: {} }, undefined, { signal: controller.signal }).then(() => false, () => true)
+  try {
+    const deadline = Date.now() + 4000
+    while (!state.log.slice(before).some(r => r.path === 'setScene') && Date.now() < deadline) await new Promise(r => setTimeout(r, 10))
+    expect(state.log.slice(before).some(r => r.path === 'setScene')).toBe(true)
+    controller.abort()
+    expect(await cancelled).toBe(true)
+    expect((await call('ecamm_set_volume', { bus: 'mic', volume: 100 })).isError).not.toBe(true)
+    expect(state.log.slice(before).filter(r => r.path === 'setScene')).toHaveLength(1)
+  } finally { controller.abort(); state.buttonLabel = undefined }
+}, 10000)

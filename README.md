@@ -95,6 +95,7 @@ What you need to know:
 - **By default the scene sheet changes nothing.** You get the pictures Ecamm already has, each marked current or possibly old.
 - **Fresh pictures mean switching through every scene**, so you have to ask for that ("refresh them"). Anything fed from Ecamm, like a virtual camera, a Zoom call or a second display, will see each scene flash by, and scenes that start media will start it. It then returns to the scene you were on and tells you whether that worked.
 - **It won't refresh while you're live, recording, starting or ending**, or when it can't tell. If someone changes the scene or starts a broadcast partway through, it stops and leaves things as that person set them.
+- **MCP cancellation stops further scene changes during a refresh.** An in-flight switch may still finish. It does not restore the starting scene after cancellation; check which scene is on screen.
 
 ## The pre-show check
 

@@ -2,6 +2,12 @@
 
 Updated November 10, 2026 (America/Los_Angeles).
 
+## Codex scene-refresh cancellation follow-up
+
+Extended MCP cancellation into `refreshSceneThumbnails`: check before/after reads and thumbnail waits, skip further scene switches, and do not automatically restore after cancellation. Already-sent switches may finish. Two additional unit checks cover cancellation before any work and after thumbnail lookup, and a real MCP transport test cancels after the first scene switch and confirms the next queued command runs with no additional switches/restoration. Both cue and refresh cancellation integration cases pass against the packaged server.
+
+CI for `b821838` (the 218-test source suite before identity/refresh follow-ups) completed successfully across all jobs. Later commits remain review-branch development work, not a release or installed extension update.
+
 ## Codex build identification
 
 Added `--build-info` plus a `server` identity block in both Ecamm status and recording diagnostics. Packaged builds embed the repository commit and whether relevant source/package files were changed; unbundled TypeScript and non-Git source archives report unknown provenance. This helps distinguish same-version test packages and diagnose stale installed builds. It is diagnostic labeling, not a signature. The actual extension archive verifier checks that CLI and MCP report the same build identity.
