@@ -40,6 +40,30 @@ The project now ignores `/recordings/` and `/.local/`. A generated helper is at 
 
 Shortcuts currently reports **scripting actions are disabled**. An unassigned draft named **Ecamm Recording Complete - Setup Pending** exists with an unconfigured Run Shell Script action. Do not describe it as installed/working. The generated script is ready, but enabling scripting requires Guy's approval while awake. After approval: finish the action (stdin input), preserve any existing Broadcast Finishes automation, assign it in Ecamm, and test a local recording with Guy watching. Ecamm's own recording destination has not been changed. No live starts, recording starts, releases, or main merges overnight.
 
+## Claude update 8, November 11, 2026 (1:20 PM Pacific)
+
+Apple silicon results, relayed by Guy from a Claude Code session on the M1 iMac. Claude in this session did not observe any of it. No on-air action was taken there; on-air tools were dry runs only.
+
+**Environment as reported:** macOS 26.7.2 (25G332), Ecamm Live 4.6.2, Claude 5.1231.2. ecamm-mcp installed from the `.mcpb`. Server block: version 0.3.0, commit `3883c2f23b1b5b8f8dc144a927a9baa3821fae6a`, `dirty: false`. That is one CI-only commit behind the PR #12 head `f90dc0d`.
+
+| Check on the M1 | Reported result |
+| --- | --- |
+| Dry runs without `confirm`: `ecamm_start_stop`, `ecamm_recording` new file, `ecamm_post_comment`, `ecamm_zoom` new meeting, `ecamm_set_profile` | All returned a dry run. Nothing clicked |
+| `ecamm_start_stop` with no intent | Refused to act and asked for an intent |
+| `ecamm_status`, `ecamm_preflight` (go_live), `ecamm_discover`, `ecamm_list_scenes`, `ecamm_list_overlays` | Pass |
+| `ecamm_list`, all six kinds | Pass |
+| Parallel `ecamm_list` calls | 0 of 18 timed out in later rounds. The first batch of four, minutes after install, all failed with "timed out after 4000 ms". Not reproduced |
+| `ecamm_preflight` with intent `record` | Inconclusive. Came back as `go_live`. That session started while 0.2.2 was installed, and its old tool list does not send the new `intent` argument |
+| `ecamm_scene_sheet`, `ecamm_prepare_session`, `ecamm_plan_cue` | Not run. The old session cannot see tools added after it started |
+
+**What this does and does not show**
+- It is the first report of a 0.3.0 build running on Apple silicon, installed from the extension. It does not settle the "install from the README as a stranger" gate: the report does not say the README was the only guide, and the Mac already had 0.2.2.
+- A chat that was open before an upgrade keeps the old tool list. New tools are missing and new arguments on old tools are dropped without an error. For `ecamm_start_stop` that is safe, since no intent means no click. The README should say to start a new chat after updating.
+- The four early timeouts are unexplained. Interpretation only: first contact after install includes discovery and Ecamm's approval, and four calls arriving together may have waited on that. The check that would tell is four parallel list calls as the first thing in a new chat after restarting Claude.
+- The camera list includes "Camera A" and "Camera B" (`PLACEHOLDER_CAMERA_00000x`). These appear to come from Ecamm.
+
+**Still owed on the M1:** restart Claude, new chat, then four parallel list calls first, `ecamm_preflight` with `record`, `ecamm_scene_sheet`, `ecamm_prepare_session` (record_only), `ecamm_plan_cue` (plan only).
+
 ## Claude update 7, November 11, 2026 (12:15 AM Pacific)
 
 No code changes. Evidence only. Codex's own account is in `docs/OVERNIGHT_HANDOFF.md` on draft PR #11 (`fbc4e73`).
