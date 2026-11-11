@@ -2,7 +2,7 @@
   "manifest_version": "0.3",
   "name": "ecamm-mcp",
   "display_name": "Ecamm Live",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "Run Ecamm Live from Claude: scenes, overlays, audio, sound effects, markers, go live and record.",
   "long_description": "Lets Claude control Ecamm Live on this Mac through Ecamm's own Remote Control feature (the one Stream Deck and Companion use). Ask for a scene by name, show or hide overlays, mute and set volumes, fire sound effects, drop markers, run Ecamm for Zoom, and start or stop a broadcast or recording.\n\nThe first time Claude talks to Ecamm Live, Ecamm asks \"Claude (ecamm-mcp) Wants To Control Ecamm\". Click Allow.\n\nAnything that goes on air (go live, end, record, public comments) is a dry run until you confirm it. Community project, not affiliated with Ecamm Network.",
   "author": {
