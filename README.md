@@ -41,7 +41,7 @@ curl -fsSL https://raw.githubusercontent.com/guycochran/ecamm-mcp/main/install.s
 Piping a script from the internet into your shell means trusting it. You can [read install.sh](install.sh) first. It does this:
 
 1. Uses the Node.js you already have. If you have none, it downloads a private copy into `~/.ecamm-mcp` and checks it against nodejs.org's checksum. No sudo, nothing installed system-wide.
-2. Downloads the server into `~/.ecamm-mcp` and checks it against the release's `SHA256SUMS.txt`. A mismatch stops the install.
+2. Downloads the server into `~/.ecamm-mcp` and checks it against the release's `SHA256SUMS.txt`. If the checksum file is missing, can't be downloaded, or doesn't match, nothing is installed. Releases before 0.3.0 have no checksum file, so this installer refuses them; for an older version use that release's extension.
 3. Adds Ecamm to Claude desktop. Your existing Claude config is backed up first and nothing else in it is touched.
 4. Opens Ecamm Live if it's closed and gets it to ask for permission. Click **Allow**.
 
