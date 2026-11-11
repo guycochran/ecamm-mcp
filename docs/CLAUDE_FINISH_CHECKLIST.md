@@ -25,7 +25,9 @@ No signed/installed Shortcut, ffprobe bundling, automatic ISO association, marke
 1. Record the Ecamm version, macOS version, hardware, plan, active profile, and output use. Codex inspected installed Ecamm 4.6.2 resources; the downloaded Remote API document is labeled v4.7. Do not assume current UI/features match that document.
 2. Use a disposable rehearsal profile only after establishing that no current broadcast, virtual camera call, recording, NDI/monitor output, or other audience depends on the current production. If that cannot be established, pause production mutations and ask Guy to make the rehearsal environment available. Do not interrupt his working setup.
 3. Check configuration in the actual MCP and Shortcut helper environments. Codex's default CLI environment reported no configured recording roots, no available ffprobe, and no inbox. This was not an inspection of Guy's desktop-extension settings. Find/install an appropriate ffprobe and configure its absolute path as needed; do not silently install a system-wide package or overwrite existing settings.
-4. Use `ecamm_recording_status` and `recording-doctor` to compare recording folders/inbox between the MCP and helper. Then test a known file with actual ffprobe. Automated media tests so far use an inspector stand-in.
+4. Use `ecamm_recording_status` and `recording-doctor` to compare recording folders/inbox between the MCP and helper. Then test an actual Ecamm-produced file. Core CLI integration tests use an inspector stand-in; generated-media tests now exercise actual ffprobe separately.
+
+Follow-up: Codex has now added actual ffprobe validation with generated media; see `docs/REAL_MEDIA_VALIDATION.md`. The temporary Intel Mac test binary is at `/tmp/ecamm-real-media-tools/ffprobe` on Guy's Mac, not in Claude's Linux environment and not a permanent install. Actual Ecamm outputs and the completion Shortcut still need validation. Claude is currently working on honest preflight; Codex is handling media verification and CI separately to avoid duplication.
 
 ## Real Ecamm acceptance, in order
 

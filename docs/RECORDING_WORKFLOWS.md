@@ -100,4 +100,6 @@ Embedded cover art is excluded when deciding whether a file contains a video tra
 
 Automated tests cover folder boundaries, escaped symlinks, duplicate concurrent events, malformed events/input, missing storage, replacement files, incomplete expected assets, metadata failures, read-only tools, and CLI-to-MCP round trips. The integration test uses a deterministic fake media inspector; it does not substitute for actual media decoding.
 
-Before release: test with real ffprobe and Ecamm output; install and exercise the Shortcut on the target Mac; verify pause/split and separate-track relationships; confirm guest audio/video and storage-loss behavior. Do not advertise automatic recording setup or full editor delivery based on these tests.
+An additional [real-media suite](REAL_MEDIA_VALIDATION.md) exercises actual ffprobe against generated MP4/MOV/M4A files, attached artwork, and a truncated file. It found and fixed a case where ffprobe exits successfully with no usable stream/duration metadata; this now reports `incomplete_metadata`.
+
+Before release: test actual Ecamm output; install and exercise the Shortcut on the target Mac; verify pause/split and separate-track relationships; confirm guest audio/video and storage-loss behavior. Generated media tests do not establish those behaviors. Do not advertise automatic recording setup or full editor delivery based on these tests.

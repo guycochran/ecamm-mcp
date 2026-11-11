@@ -20,7 +20,26 @@ jobs:
       - run: npm test
       - run: npm run package
       - name: Run the end-to-end suite against the shipped single-file bundle
-        run: ECAMM_MCP_ENTRY="$PWD/release/ecamm-mcp.cjs" npx vitest run test/e2e.test.ts
+        run: ECAMM_MCP_ENTRY="$PWD/release/ecamm-mcp.cjs" npx vitest run test/e2e.test.ts test/recording-e2e.test.ts test/workflow-e2e.test.ts
+
+  real-media:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Install media test tools
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - run: npm run build
+      - run: npm run package
+      - name: Test generated recordings with real ffprobe
+        env:
+          ECAMM_TEST_FFMPEG: /usr/bin/ffmpeg
+          ECAMM_TEST_FFPROBE: /usr/bin/ffprobe
+        run: ECAMM_MCP_ENTRY="$PWD/release/ecamm-mcp.cjs" npx vitest run test/real-media.test.ts
 
   # The installer on a real Mac, both ways: with the Mac's own Node.js and with none.
   install-mac:
