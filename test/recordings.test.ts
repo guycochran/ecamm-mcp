@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { mkdtemp, mkdir, readFile, readdir, rename, rm, symlink, writeFile } from 'node:fs/promises'
+import { link, mkdtemp, mkdir, readFile, readdir, rename, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { allowedRecording, inspectRecording, listRecordings, mediaProbe, prepareHandoff, receiveRecording, recordingOptions, type RecordingOptions } from '../src/recordings.js'
+import { allowedRecording, inspectRecording, listRecordings, mediaProbe, prepareHandoff, receiveRecording, recordingDoctor, recordingOptions, type RecordingOptions } from '../src/recordings.js'
 
 const video = async () => ({ streams: [{ codec_type: 'video', width: 1920, height: 1080 }, { codec_type: 'audio', channels: 2 }], format: { duration: '12.5', format_name: 'mov,mp4' } })
 let directory: string, root: string, movie: string, opts: RecordingOptions
@@ -84,6 +84,28 @@ describe('persistent completion inbox', () => {
 })
 
 describe('inspection and edit receipts', () => {
+  it('does not mistake album artwork for a guest video recording', async () => {
+    const result = await inspectRecording(movie, opts, async () => ({
+      streams: [{ codec_type: 'audio' }, { codec_type: 'video', disposition: { attached_pic: 1 } }], format: { duration: '12' },
+    }))
+    expect(result.hasVideo).toBe(false)
+    expect(result.hasAudio).toBe(true)
+  })
+  it('does not count hard links as separate recording tracks', async () => {
+    const event = await receiveRecording(movie, opts)
+    const alias = join(root, 'guest.mp4'); await link(movie, alias)
+    const result = await prepareHandoff(event.eventId, [{ label: 'Guest', kind: 'video', path: alias }], opts, video)
+    expect(result.assets[0].status).toBe('duplicate_file')
+  })
+  it('diagnoses unavailable dependencies without opening media or creating the inbox', async () => {
+    const result = await recordingDoctor({ ...opts, roots: [root, movie, '/missing/volume'], ffprobe: '/missing/ffprobe' })
+    expect(result.folders.map(f => f.status)).toEqual(['available', 'not_a_folder', 'unavailable'])
+    expect(result.inspector.status).toBe('unavailable')
+    expect(result.metadataInspectionConfigured).toBe(false)
+    expect(result.completionHook).toBe('not_verified')
+    expect(result.inbox.status).toBe('not_created')
+    await expect(readdir(opts.inbox)).rejects.toThrow()
+  })
   it('reports metadata without claiming audible speech or completion', async () => {
     const result = await inspectRecording(movie, opts, video)
     expect(result).toMatchObject({ status: 'metadata_read', durationSeconds: 12.5, hasVideo: true, hasAudio: true })

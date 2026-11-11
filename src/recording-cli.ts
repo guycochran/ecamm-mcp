@@ -1,9 +1,13 @@
 import { z } from 'zod'
-import { receiveRecording, recordingOptions } from './recordings.js'
+import { receiveRecording, recordingDoctor, recordingOptions } from './recordings.js'
 
 /** Completion paths travel as JSON on stdin, never as executable shell text. */
 export async function runRecordingCli(args: string[]): Promise<number> {
   try {
+    if (args.length === 1 && args[0] === 'recording-doctor') {
+      console.log(JSON.stringify(await recordingDoctor(recordingOptions()), null, 2))
+      return 0
+    }
     const pathInput = args.length === 2 && args[1] === '--path-stdin'
     if (args[0] !== 'recording-complete' || (args.length !== 1 && !pathInput)) throw new Error('Usage: ecamm-mcp recording-complete [--path-stdin] < input (default input is JSON: {"path":"/absolute/recording.mp4"})')
     let bytes = 0

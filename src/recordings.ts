@@ -58,13 +58,13 @@ export async function receiveRecording(path: string, opts: RecordingOptions) {
   await mkdir(opts.inbox, { recursive: true, mode: 0o700 })
   const temp = join(opts.inbox, `.${randomUUID()}.tmp`)
   const destination = join(opts.inbox, `${id}.json`)
-  const file = await open(temp, 'wx', 0o600)
-  try {
-    await file.writeFile(JSON.stringify(event) + '\n')
-    await file.sync()
-  } finally { await file.close() }
   let duplicate = false
   try {
+    const file = await open(temp, 'wx', 0o600)
+    try {
+      await file.writeFile(JSON.stringify(event) + '\n')
+      await file.sync()
+    } finally { await file.close() }
     // Link is atomic and will not replace an earlier event with the same identity.
     await link(temp, destination)
   } catch (err) {
@@ -112,6 +112,7 @@ const probeSchema = z.object({
   streams: z.array(z.object({
     codec_type: z.string().optional(), codec_name: z.string().optional(),
     width: z.number().optional(), height: z.number().optional(), channels: z.number().optional(),
+    disposition: z.object({ attached_pic: z.number().optional() }).optional(),
   })).max(256).default([]),
   format: z.object({ duration: z.string().optional(), format_name: z.string().optional() }).optional(),
 })
@@ -120,7 +121,7 @@ export type Probe = (path: string) => Promise<unknown>
 export function mediaProbe(executable: string): Probe {
   return path => new Promise((resolve, reject) => {
     execFile(executable, ['-v', 'error', '-protocol_whitelist', 'file', '-format_whitelist', 'mov,matroska,webm,wav,mp3,aac,flac,ogg', '-show_entries',
-      'format=duration,format_name:stream=codec_type,codec_name,width,height,channels', '-of', 'json', path],
+      'format=duration,format_name:stream=codec_type,codec_name,width,height,channels:stream_disposition=attached_pic', '-of', 'json', path],
     { timeout: 15000, maxBuffer: 1024 * 1024, encoding: 'utf8' }, (err, stdout) => {
       if (err) {
         reject(new Error((err as NodeJS.ErrnoException).code === 'ENOENT'
@@ -146,7 +147,7 @@ export async function inspectRecording(path: string, opts: RecordingOptions, pro
     identity: identityOf(after), status: changed ? 'changing' as const : 'metadata_read' as const,
     durationSeconds, format: media.format?.format_name,
     streams: media.streams,
-    hasVideo: media.streams.some(s => s.codec_type === 'video'),
+    hasVideo: media.streams.some(s => s.codec_type === 'video' && s.disposition?.attached_pic !== 1),
     hasAudio: media.streams.some(s => s.codec_type === 'audio'),
     limitations: [
       'Metadata inspection does not prove complete decoding, finalization, synchronization, or audible speech.',
@@ -163,6 +164,7 @@ export async function prepareHandoff(eventIdValue: string, assets: ExpectedAsset
   const main = await inspectRecording(event.path, opts, probe)
   if (JSON.stringify(main.identity) !== JSON.stringify(event.identity)) throw new Error('The original recording has been replaced. This event cannot identify the replacement session.')
   const inspected = new Map([[main.path, main]])
+  const fileIdentities = new Set([`${main.identity.dev}:${main.identity.ino}`])
   const result = []
   const deadline = Date.now() + 45000
   for (const asset of assets) {
@@ -175,7 +177,13 @@ export async function prepareHandoff(eventIdValue: string, assets: ExpectedAsset
         continue
       }
       const media = await inspectRecording(canonical, opts, probe)
+      const identity = `${media.identity.dev}:${media.identity.ino}`
+      if (fileIdentities.has(identity)) {
+        result.push({ ...asset, status: 'duplicate_file', detail: 'This path is a hard link to an already listed file, not a separate recording.' })
+        continue
+      }
       inspected.set(canonical, media)
+      fileIdentities.add(identity)
       const matches = asset.kind === 'audio' ? media.hasAudio : asset.kind === 'video' ? media.hasVideo : media.hasAudio && media.hasVideo
       result.push({ ...asset, status: media.status === 'changing' ? 'pending' : !matches || !media.durationSeconds ? 'needs_check' : 'metadata_checked', media })
     } catch (err) { result.push({ ...asset, status: 'unavailable', detail: err instanceof Error ? err.message : String(err) }) }
@@ -187,5 +195,36 @@ export async function prepareHandoff(eventIdValue: string, assets: ExpectedAsset
     limitations: ['Only explicitly supplied files were associated with this session. No automatic ISO or marker matching was performed.',
       'An empty expected-assets list does not establish that all session tracks are present.',
       'This receipt neither transfers files nor verifies backup, editing import, or audio/video synchronization.'],
+  }
+}
+
+/** Diagnose setup without opening recordings, writing files, or contacting Ecamm. */
+export async function recordingDoctor(opts: RecordingOptions) {
+  const folders = await Promise.all(opts.roots.map(async path => {
+    try {
+      const canonical = await realpath(path)
+      const info = await stat(canonical)
+      return { path, canonical, status: info.isDirectory() ? 'available' : 'not_a_folder' }
+    } catch { return { path, status: 'unavailable' } }
+  }))
+  const inspector = await new Promise<{ status: string; version?: string; detail?: string }>(resolve => {
+    execFile(opts.ffprobe, ['-version'], { timeout: 5000, maxBuffer: 65536, encoding: 'utf8' }, (err, stdout) => {
+      if (err) return resolve({ status: 'unavailable', detail: 'Set the media inspector location to an installed ffprobe executable.' })
+      const firstLine = stdout.split(/\r?\n/, 1)[0]
+      resolve(/^ffprobe version\s/.test(firstLine)
+        ? { status: 'available', version: firstLine.slice(0, 256) }
+        : { status: 'unrecognized', detail: 'The configured executable did not identify itself as ffprobe.' })
+    })
+  })
+  let inboxStatus = 'not_created'
+  try { inboxStatus = (await stat(opts.inbox)).isDirectory() ? 'exists' : 'not_a_folder' } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== 'ENOENT') inboxStatus = 'unavailable'
+  }
+  return {
+    machine: hostname(), folders, inspector, inbox: { path: opts.inbox, status: inboxStatus },
+    metadataInspectionConfigured: inspector.status === 'available' && folders.some(f => f.status === 'available'),
+    completionHook: 'not_verified',
+    limitations: ['This checks configuration only, not recording quality, folder write permission, or whether Ecamm has the completion Shortcut enabled.',
+      'The Shortcut helper and MCP must use the same recording folders and inbox on this Mac.'],
   }
 }

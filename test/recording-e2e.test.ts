@@ -26,6 +26,7 @@ beforeAll(async () => {
   // A deterministic stand-in tests process arguments and MCP wiring, not real media decoding.
   await writeFile(probe, `#!${process.execPath}\nconst fs = require('node:fs');
 const args = process.argv.slice(2);
+if (args[0] === '-version') { console.log('ffprobe version test-fixture'); process.exit(0); }
 if (!args.includes('-protocol_whitelist') || !args.includes('-format_whitelist') || fs.readFileSync(args.at(-1), 'utf8') !== 'test fixture') process.exit(2);
 console.log(JSON.stringify({streams:[{codec_type:'video'},{codec_type:'audio'}],format:{duration:'2.5'}}));\n`)
   await chmod(probe, 0o700)
@@ -36,6 +37,12 @@ console.log(JSON.stringify({streams:[{codec_type:'video'},{codec_type:'audio'}],
 afterAll(async () => { await client?.close(); if (directory) await rm(directory, { recursive: true, force: true }) })
 
 describe('completion helper and MCP integration without a running Ecamm', () => {
+  it('checks configuration through MCP without claiming the Shortcut works', async () => {
+    const r = await client.callTool({ name: 'ecamm_recording_status', arguments: {} })
+    expect(r.isError).not.toBe(true)
+    const result = JSON.parse((r.content as { text: string }[])[0].text)
+    expect(result).toMatchObject({ metadataInspectionConfigured: true, completionHook: 'not_verified', inspector: { status: 'available' } })
+  })
   it('round-trips stdin, durable events, metadata inspection and handoff in read-only mode', async () => {
     const completed = await complete(JSON.stringify({ path: movie }))
     expect(completed.code).toBe(0)

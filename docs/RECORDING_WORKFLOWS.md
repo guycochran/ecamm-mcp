@@ -63,6 +63,8 @@ Ecamm documents the event's recording path, but split-file and Dual Mode behavio
 
 ## Inspect and hand off
 
+Start with `ecamm_recording_status` (or `node /absolute/path/to/server recording-doctor` in the helper's environment). It checks recording-folder availability, inbox location, and whether the configured executable identifies as ffprobe. It opens no recordings and creates no files. It deliberately reports the completion hook as unverified: only a real event can test that. Desktop settings and Shortcut environment must agree.
+
 1. `ecamm_list_recordings`: lists saved completion notifications. No recording-folder scan or newest-file guess.
 2. `ecamm_inspect_recording`: reads metadata for an explicit allowed path. Reports duration, dimensions when available, audio/video stream presence, and whether the file changed during inspection.
 3. `ecamm_prepare_edit_handoff`: takes a notification's `event_id` and optional `expected_assets`. The main program is included automatically. Supply separate assets with a label, kind (`video`, `audio`, or `program`), and exact path. Leave the path out to identify an expected but not yet located track.
@@ -80,6 +82,8 @@ Example tool arguments:
 ```
 
 The receipt is returned in chat as structured data. It does not write an export folder. It identifies files needing attention, missing paths, duplicate files, and unreadable assets. It refuses to associate an old notification with a replacement file at the same path. Media is never moved, renamed, deleted, copied, uploaded, or opened in an editor.
+
+Embedded cover art is excluded when deciding whether a file contains a video track. Hard links to the same underlying file are flagged as duplicates, even when their paths differ.
 
 `metadata_checked` means that the listed media passed basic metadata checks. It does not prove full decoding, usable sound, complete recording, matching timelines, or that every expected track was listed. No automatic ISO association, marker parsing, silence detection, backup verification, or editor transfer is implemented yet.
 

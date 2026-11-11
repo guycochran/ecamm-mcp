@@ -1,7 +1,7 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { z } from 'zod'
 import { type EcammClient, scalar } from './client.js'
-import { inspectRecording, listRecordings, prepareHandoff, recordingOptions } from './recordings.js'
+import { inspectRecording, listRecordings, prepareHandoff, recordingDoctor, recordingOptions } from './recordings.js'
 
 const intentSchema = z.enum(['record_only', 'stream_and_record', 'stream_only', 'present'])
 export type SessionIntent = z.infer<typeof intentSchema>
@@ -66,6 +66,10 @@ export function registerWorkflowTools(server: McpServer, client: EcammClient) {
     }
   }
   const annotations = { readOnlyHint: true, destructiveHint: false, openWorldHint: false }
+  server.registerTool('ecamm_recording_status', {
+    description: 'Check local recording-folder configuration, completion inbox location, and ffprobe availability without opening recordings or contacting Ecamm. Does not verify the completion Shortcut is enabled.',
+    inputSchema: {}, annotations,
+  }, safe(async () => recordingDoctor(recordingOptions())))
   server.registerTool('ecamm_prepare_session', {
     description: 'Read-only preparation for recording, streaming, or presenting. Lists observed facts and required human checks without changing scenes, settings, or output. Use instead of a streaming-only preflight for interviews recorded for later editing.',
     inputSchema: { intent: intentSchema, scenes: z.array(z.string().min(1).max(256)).max(100).default([]) }, annotations,
