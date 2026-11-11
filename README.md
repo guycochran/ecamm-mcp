@@ -151,6 +151,7 @@ Things it handles so you don't have to:
 - Overlays can only be read and controlled for the **current scene**.
 - The only way to tell whether you're live is the main button's label (`Go Live` vs `End Broadcast`), which is what `ecamm_status` reports.
 - Ecamm does not publish documentation for this API. A future Ecamm update could change it.
+- **Markers don't save yet.** Ecamm accepts the marker command and replies "Done", but nothing is written to the recording's marker file. Markers added by hand in Ecamm work. Being looked into.
 - A bus that doesn't exist reports as unmuted.
 - Picture-in-picture can be toggled, but Ecamm doesn't report whether it's on.
 
@@ -212,7 +213,7 @@ Releases: bump the version in `package.json`, `src/version.ts` and `mcpb/manifes
 
 `npm test` runs unit tests plus an end-to-end run of the real MCP server against a fake Ecamm that reproduces the real response shapes, the toggle behavior, the scene-switch delay, the Allow flow, a relaunch on a new port, and loopback discovery. CI runs the same suite against the shipped bundle and runs `install.sh` on real Macs, with and without Node.js installed.
 
-Against a real Ecamm Live so far, including an unlisted YouTube test broadcast: discovery, the Allow dialog, status, the pre-show check, all lists, thumbnails, scene switch and step, overlays, mute, volume, sound effects, camera, source mode, preview mode, the Zoom panel, going live and ending, a public chat comment, and the dry-run guard on Go Live, profile switch and Zoom end. Sent during that broadcast and accepted by Ecamm, but the result was not checked: markers, the comment overlay and splitting the recording. Not yet run against a real Ecamm: pausing a recording, audio filters and video playback. If something behaves differently on your setup, please open an issue.
+Against a real Ecamm Live so far, including an unlisted YouTube test broadcast: discovery, the Allow dialog, status, the pre-show check, all lists, thumbnails, scene switch and step, overlays, mute, volume, sound effects, camera, source mode, preview mode, the Zoom panel, going live and ending, a public chat comment, the comment overlay, splitting the recording, and the dry-run guard on Go Live, profile switch and Zoom end. Not yet run against a real Ecamm: pausing a recording, audio filters and video playback. If something behaves differently on your setup, please open an issue.
 
 ## Credits
 
