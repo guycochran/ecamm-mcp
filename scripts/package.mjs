@@ -5,7 +5,7 @@
  *   release/ecamm-mcp.mcpb  the Claude desktop extension (double-click to install)
  */
 import { execFileSync } from 'node:child_process'
-import { cpSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
+import { cpSync, mkdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { build } from 'esbuild'
@@ -17,6 +17,14 @@ rmSync(out, { recursive: true, force: true })
 mkdirSync(join(stage, 'server'), { recursive: true })
 
 const bundle = join(out, 'ecamm-mcp.cjs')
+let provenance = { commit: null, dirty: null }
+try {
+  const repository = execFileSync('git', ['rev-parse', '--show-toplevel'], { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim()
+  if (realpathSync(repository) !== realpathSync(root)) throw new Error('Build directory is not the repository root')
+  const commit = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim()
+  const status = execFileSync('git', ['status', '--porcelain', '--untracked-files=normal', '--', 'src', 'scripts', 'mcpb', 'package.json', 'package-lock.json'], { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim()
+  if (/^[a-f0-9]{40,64}$/.test(commit)) provenance = { commit, dirty: status.length > 0 }
+} catch { /* Source archives without Git remain explicitly unidentified. */ }
 await build({
   entryPoints: [join(root, 'src', 'index.ts')],
   outfile: bundle,
@@ -26,6 +34,7 @@ await build({
   format: 'cjs',
   legalComments: 'none',
   logLevel: 'warning',
+  define: { __ECAMM_BUILD__: JSON.stringify(provenance) },
 })
 
 cpSync(bundle, join(stage, 'server', 'index.js'))

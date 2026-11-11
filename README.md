@@ -265,6 +265,8 @@ npm test
 npm run package      # builds release/ecamm-mcp.mcpb and release/ecamm-mcp.cjs
 ```
 
+To identify a test package, run `node release/ecamm-mcp.cjs --build-info` or ask for recording status. Bundles report their source commit and whether relevant source files had local changes when packaged. Plain `tsc` builds and source archives without Git report unavailable provenance rather than guessing. This is a troubleshooting label, not a signature or security attestation. A development package can share the published version number; compare its commit when checking which fixes are installed.
+
 Releases: bump the version in `package.json`, `src/version.ts` and `mcpb/manifest.json`, then push a tag like `v0.2.0`. GitHub Actions builds the extension and the single-file server and attaches them to the release.
 
 </details>

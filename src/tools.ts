@@ -4,6 +4,7 @@ import { buildSceneSheet, type SheetCell } from './sheet.js'
 import { cueStepSchema, MAX_CUE_STEPS, planCue, runCue, type CueStep } from './cue.js'
 import { AUDIO_BUSES, apiAudioBus, EcammClient, onAirState, planMainButton, preflight, resolveItem, scalar, summarizeInfo, yes, type BroadcastIntent, type Item, type ThumbnailRefresh, type ThumbnailStatus } from './client.js'
 import { EcammError } from './http.js'
+import { BUILD_INFO } from './version.js'
 
 type Content = { type: 'text'; text: string } | { type: 'image'; data: string; mimeType: string }
 type Result = { content: Content[]; isError?: boolean }
@@ -78,6 +79,7 @@ export function registerTools(server: McpServer, client: EcammClient, opts: { re
       const scene = scenes.find((s) => s.id === cur)
       return text({
         connectedTo: client.target.host,
+        server: BUILD_INFO,
         machine: client.target.instance?.hostname,
         approved: true,
         currentScene: scene ? { id: scene.id, title: label(scene) } : cur,
