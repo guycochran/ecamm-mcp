@@ -157,6 +157,7 @@ Terminal install: run this and read the output. Paste it when you ask for help.
 | Problem | Fix |
 | --- | --- |
 | Claude doesn't know about Ecamm | Quit Claude completely (Cmd+Q, not just closing the window) and reopen it. |
+| Recording folder is saved, but the tool says none configured | Save the extension settings, then quit Claude completely with Cmd+Q and reopen it. Ask “check my recording setup” again. A new chat or extension toggle alone did not refresh the settings in our Mac test. |
 | "Could not find Ecamm Live" | Open Ecamm Live. It has to be running. |
 | "Waiting for approval" | Click **Allow** in Ecamm Live, or tick **Claude (ecamm-mcp)** in Settings > Remote Control. |
 | It was working, then Ecamm restarted | Nothing to do. Ecamm picks a new port every launch and the server finds it again on the next request. |

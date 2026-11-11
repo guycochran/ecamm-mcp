@@ -19,6 +19,8 @@ The development desktop extension has two optional settings:
 - **Recording folder:** the full path to a recording folder on the same Mac as this MCP server. Leave blank to disable media-file inspection.
 - **Media inspector location:** the full path to an installed `ffprobe` executable. ffprobe is part of FFmpeg; this project does not download or bundle it automatically.
 
+After saving these settings, quit Claude completely with **Cmd+Q** and reopen it, then ask **“check my recording setup.”** Confirm that the folder is listed as available and `metadataInspectionConfigured` is true. In our Mac test, a new chat and an extension off/on toggle still returned the old empty-folder result; a complete app restart refreshed it. This setting grants the MCP access to that folder; it does not change Ecamm's recording-save destination.
+
 For a manually configured server, use `ECAMM_RECORDING_FOLDER` for one folder. Advanced setups can use `ECAMM_RECORDING_ROOTS`, a JSON array of absolute folders, which takes precedence. For example:
 
 ```json

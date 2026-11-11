@@ -1,5 +1,11 @@
 # Overnight checkpoint — November 11, 2026
 
+## Morning resolution — about 5:21 AM Pacific
+
+The app-connected recording-folder discrepancy is resolved. Only one Ecamm extension was installed, and its saved folder settings were intact. With Guy's explicit installation approval, Codex backed up the old installation/settings under `.local/before-morning-extension-update`, replaced it with the verified **b5dbb4f** package, and restored the folder and ffprobe settings through the UI. The first app-connected call identified that exact clean build but still returned an empty folder list. A narrowly filtered process check found both recording environment values matching the saved settings. After fully quitting and reopening Claude, its `ecamm_recording_status` returned the project recordings folder as **available**, the inspector as **available**, and `metadataInspectionConfigured: true`. The underlying app connection mechanism was not established; the observed recovery was the full restart.
+
+The installed extension is now the verified build, superseding the older-installation and unresolved-folder statements below. The completion Shortcut remains unverified and Ecamm's own recording destination remains unchanged. No recording or broadcast was initiated. Setup/troubleshooting docs now include the full-app restart step.
+
 ## Tested code
 
 The combined implementation is on `claude/broadcast-intent` at **b5dbb4ffa2b57c82d29d30a7716e319f7e991217**, in [PR #9](https://github.com/guycochran/ecamm-mcp/pull/9). PR #10 was merged into that review branch, not main. No release/tag or main merge was performed.
