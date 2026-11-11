@@ -96,7 +96,12 @@ Ecamm saves two small files beside a recording, under exactly the same name. Bot
 
 `ecamm_read_markers` takes the path of a marker `.txt` inside the recording folder and returns each marker with its time in seconds, its timecode and its text, plus ready-made `time text` lines for a description. `ecamm_prepare_edit_handoff` attaches the marker and comment files for the main recording when they sit beside it under exactly the same name; a near miss is not attached.
 
-A file in any other layout is reported as unrecognized and nothing is inferred from it. Still unverified: how marker times behave across a pause, and what a split into a new file does to them. A split was seen to start a new recording file with its own timestamp in its name.
+A file in any other layout is reported as unrecognized and nothing is inferred from it. Seen in one real session (Ecamm 4.6.2, Record Only, one pause, one split):
+
+- Marker times count recorded time. A pause adds nothing, and a marker dropped while paused gets the time of the pause.
+- A split starts a new recording file with its own timestamp in its name and its own marker file. That file gets its own `Start` at `00:00:00`, but later markers carry on from the earlier part: a marker read `00:00:47` in a file 17.6 seconds long.
+
+So `ecamm_read_markers` compares marker times with the length of the recording of the same name when it can inspect it, and reports `none_past_end`, `past_end` or `not_checked`. For `past_end` it returns the markers as written, applies no correction and withholds the description lines. `none_past_end` is not proof that times are positions in the file: in a long later part, carried-on times can still fall inside it. The receipt lists a past-end or unreadable marker file under `sidecars.problems`, and any such problem makes the overall assessment `needs_attention`. This rests on one session and has not been checked against the picture.
 
 ## Troubleshooting
 

@@ -192,17 +192,34 @@ export function markersPastEnd(markers: { seconds: number }[], durationSeconds: 
 }
 
 /** Read a marker file inside the configured recording folders. Never writes. */
-export async function readMarkers(path: string, opts: RecordingOptions) {
+export async function readMarkers(path: string, opts: RecordingOptions, probe?: Probe) {
   const canonical = await allowedRecording(path, opts.roots)
   if (extname(canonical).toLowerCase() !== '.txt') throw new Error('Marker files end in .txt and sit beside the recording with the same name.')
   if ((await stat(canonical)).size > 262144) throw new Error('That file is larger than a marker file should be (256 KB limit).')
   const parsed = parseMarkerFile(await readFile(canonical, 'utf8'))
   const titled = parsed.markers.filter((m) => m.text)
+  const known = parsed.format === 'ecamm-markers-v1'
+  // Compare against the recording of the same name, when it is there and can be inspected.
+  // Marker times later than the file is long mean a later part of a split session.
+  let against: { recording: string; durationSeconds: number; markersPastEnd: number } | undefined
+  if (known) for (const ext of ['.mov', '.mp4']) {
+    try {
+      const media = await inspectRecording(canonical.slice(0, -4) + ext, opts, probe)
+      if (media.durationSeconds) against = { recording: media.path, durationSeconds: media.durationSeconds, markersPastEnd: markersPastEnd(parsed.markers, media.durationSeconds) }
+      break
+    } catch { /* no such recording, or no inspector: times stay unchecked */ }
+  }
+  const past = against?.markersPastEnd ?? 0
   return {
     path: canonical, ...parsed,
+    timesChecked: against ? (past ? 'past_end' : 'none_past_end') : 'not_checked',
+    ...(against ? { comparedWith: against } : {}),
     // A convenience for descriptions. YouTube has its own rules for chapters (first at 0:00, minimum count and spacing).
-    chapterLines: parsed.format === 'ecamm-markers-v1' ? titled.map((m) => `${m.timecode.replace(/^00:/, '')} ${m.text}`) : [],
-    limitations: parsed.format === 'ecamm-markers-v1' ? MARKER_LIMITS : ['This file does not match the marker layout this tool knows. Nothing was inferred from it.'],
+    // Withheld when times run past the end of the file: they would not be positions in it.
+    chapterLines: known && !past ? titled.map((m) => `${m.timecode.replace(/^00:/, '')} ${m.text}`) : [],
+    limitations: !known ? ['This file does not match the marker layout this tool knows. Nothing was inferred from it.']
+      : past ? [`${past} marker time(s) are later than the recording is long. This is probably a later part of a split session, where times carry on from the earlier part. They are not positions in this file, no correction was applied, and chapter lines were withheld.`, ...MARKER_LIMITS]
+      : against ? ['No marker time is later than the recording is long. That does not show the times are positions in this file: in a later part of a split session they can carry on from the earlier part and still fall inside a long file.', ...MARKER_LIMITS] : ['The recording of the same name could not be inspected, so marker times were not compared with its length.', ...MARKER_LIMITS],
   }
 }
 
@@ -211,14 +228,14 @@ export async function readMarkers(path: string, opts: RecordingOptions) {
  * shown comments (.srt). Only an exact name match counts. Separate-track files are not
  * looked for, because their naming has not been observed.
  */
-export async function sidecarsOf(recordingPath: string, opts: RecordingOptions) {
+export async function sidecarsOf(recordingPath: string, opts: RecordingOptions, probe?: Probe) {
   const base = recordingPath.slice(0, recordingPath.length - extname(recordingPath).length)
   const found: { markers?: Awaited<ReturnType<typeof readMarkers>>; comments?: { path: string }; problems: string[] } = { problems: [] }
   for (const [ext, kind] of [['.txt', 'markers'], ['.srt', 'comments']] as const) {
     let canonical: string
     try { canonical = await allowedRecording(base + ext, opts.roots) } catch { continue } // not there, or not ours to read
     if (kind === 'comments') found.comments = { path: canonical }
-    else try { found.markers = await readMarkers(canonical, opts) } catch (err) { found.problems.push(err instanceof Error ? err.message : String(err)) }
+    else try { found.markers = await readMarkers(canonical, opts, probe) } catch (err) { found.problems.push(err instanceof Error ? err.message : String(err)) }
   }
   return found
 }
@@ -255,12 +272,14 @@ export async function prepareHandoff(eventIdValue: string, assets: ExpectedAsset
       result.push({ ...asset, status: media.status === 'changing' ? 'pending' : !matches || !media.durationSeconds ? 'needs_check' : 'metadata_checked', media })
     } catch (err) { result.push({ ...asset, status: 'unavailable', detail: err instanceof Error ? err.message : String(err) }) }
   }
-  const sidecars = await sidecarsOf(main.path, opts)
+  const sidecars = await sidecarsOf(main.path, opts, probe)
   const past = sidecars.markers ? markersPastEnd(sidecars.markers.markers, main.durationSeconds) : 0
+  if (sidecars.markers?.format === 'unrecognized') sidecars.problems.push('The marker file beside this recording is not in a layout this tool knows. Its markers were not read.')
   if (past) sidecars.problems.push(`${past} marker time(s) are later than this recording is long. This file is probably a later part of a split session and its marker times carry on from the earlier part. They are not offsets into this file; no correction was applied.`)
   return {
     version: 1, event, main, assets: result, sidecars,
     assessment: main.status === 'changing' || !main.hasVideo || !main.hasAudio || !main.durationSeconds || result.some(a => a.status !== 'metadata_checked')
+      || sidecars.problems.length > 0
       ? 'needs_attention' : 'listed_media_metadata_checked',
     limitations: ['Only explicitly supplied media files were associated with this session. No separate-track (ISO) matching was performed.',
       'Marker and comment files are attached only when they sit beside the main recording under exactly the same name.',
