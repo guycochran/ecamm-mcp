@@ -4,7 +4,7 @@ Evidence checkpoint: November 11, 2026. This is a development-branch record, not
 
 ## Environment and evidence
 
-The real-device sessions recorded in [CLAUDE_HANDOFF.md](CLAUDE_HANDOFF.md) used Ecamm Live **4.6.2**, an **Intel iMac Pro**, and Claude desktop. The Mac currently reports **macOS 15.8.2 (24H232)**, read locally on November 11; the older session notes did not separately capture the OS version. Claude's exact app version was not recorded. A physical Apple Silicon Mac installation from the README is still owed. CI's Apple Silicon installer test is not that test.
+The real-device sessions recorded in [CLAUDE_HANDOFF.md](CLAUDE_HANDOFF.md) used Ecamm Live **4.6.2**, an **Intel iMac Pro**, and Claude desktop. The Mac currently reports **macOS 15.8.2 (24H232)**, read locally on November 11; the older session notes did not separately capture the OS version. The currently installed app plists report **Ecamm Live 4.6.2** and **Claude 5.1231.2**, read on November 11; the older sessions did not separately capture Claude's version. A physical Apple Silicon Mac installation from the README is still owed. CI's Apple Silicon installer test is not that test.
 
 The installed development bundle identifies clean commit **b5dbb4ffa2b57c82d29d30a7716e319f7e991217**, version 0.2.3. Its 37 registered tools passed archive discovery. The combined source suite passed 224 tests and the packaged suites passed 71; these include simulated Ecamm responses and generated media. They do not prove every operation works with Ecamm. Later documentation changes do not change that tested executable.
 

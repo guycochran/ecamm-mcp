@@ -96,19 +96,21 @@ if [ -n "$REF" ]; then
   cp "$TMP/src/release/ecamm-mcp.cjs" "$NEW"
 else
   say "Downloading ecamm-mcp..."
-  curl -fsSL "https://github.com/$REPO/releases/latest/download/ecamm-mcp.cjs" -o "$NEW" ||
+  # Resolve once, so a release published mid-install cannot mix two versions.
+  curl -fsSL "https://api.github.com/repos/$REPO/releases/latest" -o "$TMP/release.json" ||
+    die "Could not identify the latest published release. Try again."
+  RELEASE_TAG="$("$NODE" -e 'const r=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")); if(r.draft || r.prerelease || !/^v\d+\.\d+\.\d+$/.test(r.tag_name)) process.exit(1); console.log(r.tag_name)' "$TMP/release.json")" ||
+    die "GitHub returned an unexpected release. Not installing."
+  RELEASE_BASE="https://github.com/$REPO/releases/download/$RELEASE_TAG"
+  curl -fsSL "$RELEASE_BASE/ecamm-mcp.cjs" -o "$NEW" ||
     die "Could not download ecamm-mcp from GitHub. Check your internet connection and try again."
-  # Releases from v0.3.0 on publish SHA256SUMS.txt. A mismatch stops the install.
-  # Older releases have no checksum file; say so and carry on.
-  if curl -fsSL "https://github.com/$REPO/releases/latest/download/SHA256SUMS.txt" -o "$TMP/SHA256SUMS.txt" 2>/dev/null; then
-    want="$(awk '$2 == "ecamm-mcp.cjs" || $2 == "*ecamm-mcp.cjs" {print $1}' "$TMP/SHA256SUMS.txt" | head -n 1)"
-    [ -n "$want" ] || die "The release's SHA256SUMS.txt has no entry for ecamm-mcp.cjs. Not installing."
-    got="$(sha256 "$NEW")"
-    [ "$got" = "$want" ] || die "The download did not match the release checksum. Not installing. Try again."
-    say "Checksum verified."
-  else
-    say "This release has no checksum file, so the download was not verified."
-  fi
+  curl -fsSL "$RELEASE_BASE/SHA256SUMS.txt" -o "$TMP/SHA256SUMS.txt" ||
+    die "Could not obtain release checksums. Nothing installed. Older releases may lack checksums; use their desktop extension or retry after a checksummed release is published."
+  want="$(awk '$2 == "ecamm-mcp.cjs" || $2 == "*ecamm-mcp.cjs" {print $1}' "$TMP/SHA256SUMS.txt")"
+  [[ "$want" =~ ^[0-9a-fA-F]{64}$ ]] || die "The release must contain exactly one valid checksum for ecamm-mcp.cjs. Not installing."
+  got="$(sha256 "$NEW")"
+  [ "$got" = "$(printf '%s' "$want" | tr '[:upper:]' '[:lower:]')" ] || die "The download did not match the release checksum. Not installing. Try again."
+  say "Checksum verified for $RELEASE_TAG."
 fi
 VERSION="$("$NODE" "$NEW" --version 2>/dev/null)" || die "The download looks broken. Try again."
 mv -f "$NEW" "$DIR/ecamm-mcp.cjs"
