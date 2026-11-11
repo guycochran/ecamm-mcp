@@ -6,6 +6,8 @@ import { runCli } from './cli.js'
 import { envValue, truthy } from './env.js'
 import { registerTools } from './tools.js'
 import { VERSION } from './version.js'
+import { registerWorkflowTools } from './workflow-tools.js'
+import { runRecordingCli } from './recording-cli.js'
 
 const positiveMs = (seconds: string | undefined) => {
   const n = Number(seconds)
@@ -27,7 +29,8 @@ async function serve() {
     { name: 'ecamm-mcp', version: VERSION },
     {
       instructions:
-        'Controls Ecamm Live on a Mac through its local Remote API. Start with ecamm_status, or ecamm_preflight before a show. ' +
+        'Controls Ecamm Live on a Mac through its local Remote API. Start with ecamm_status, or ecamm_prepare_session for an intent-aware preparation report. ' +
+        'Recording-file tools are local, opt-in, and read-only. A completion notification or metadata check is not proof that all tracks were captured or audio is usable. ' +
         'On the first connection Ecamm Live shows an Allow / Deny dialog; the user must click Allow ' +
         '(or tick the client in Ecamm Live > Settings > Remote Control). ' +
         'Tools marked on-air (go live/end, recording, public comments, profiles, Zoom meeting control) return a dry run unless confirm: true. ' +
@@ -38,12 +41,15 @@ async function serve() {
   )
 
   registerTools(server, client, { readOnly: truthy(env.ECAMM_READ_ONLY) })
+  registerWorkflowTools(server, client)
   await server.connect(new StdioServerTransport())
 }
 
 // No arguments = MCP server on stdio (how Claude runs it). Arguments = setup / doctor / help.
 const args = process.argv.slice(2)
-const run = args.length ? runCli(args).then((code) => process.exit(code)) : serve()
+const run = args.length
+  ? (['recording-complete', 'recording-doctor'].includes(args[0]) ? runRecordingCli(args) : runCli(args)).then((code) => process.exit(code))
+  : serve()
 run.catch((err) => {
   console.error(err instanceof Error ? err.message : err)
   process.exit(1)

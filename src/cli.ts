@@ -249,6 +249,8 @@ const HELP = `ecamm-mcp ${VERSION}  MCP server for Ecamm Live
                          --no-claude   don't touch Claude desktop's config
                          --no-open     don't launch Ecamm Live if it's closed
   ecamm-mcp doctor     check the connection (paste the output when asking for help)
+  ecamm-mcp recording-doctor  check local recording folders, inbox, and ffprobe
+  ecamm-mcp recording-complete [--path-stdin]  save a completion event from stdin
   ecamm-mcp uninstall  disconnect from Claude desktop
   ecamm-mcp --version
 `

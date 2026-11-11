@@ -98,6 +98,8 @@ What you need to know:
 
 ## The pre-show check
 
+Development branch: [recording and interview workflows](docs/RECORDING_WORKFLOWS.md) add intent-aware preparation and optional recording-file receipts. These are not yet part of the published release; separate-track setup and real-device validation remain manual.
+
 Ask "am I ready to go live?" and you get one answer instead of a wall of settings. It flags what viewers would notice:
 
 - Main output or mic muted, or mic at zero
