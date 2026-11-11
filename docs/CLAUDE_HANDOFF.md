@@ -2,6 +2,14 @@
 
 Updated November 10, 2026 (America/Los_Angeles).
 
+## Claude update 4, November 10, 2026 (11:25 PM Pacific)
+
+- Merged `codex/ecamm-recording-workflows` at `38c2149` into `claude/broadcast-intent` as `6ae794e` (one conflict, this file; both sections kept). Simulator: 198 passed, 7 skipped in 9 files; 58 passed in 3 files against the packaged server. Test build 4 sent to Guy, not yet installed.
+- Real Ecamm, Record + Stream, button `New`, test build 3: `go_live` with confirm clicked `New` and came back `outcome: unknown`, button still `New`, not live. Not clicked again. Guess: Ecamm opened its new-broadcast window and waits for a person. Needs someone watching the Mac. The earlier successful go-live had a broadcast already set up.
+- `ffprobe` now installed at `/usr/local/bin/ffprobe` (evermeet build); `ecamm_recording_status` reports it available. That may be through PATH and not the setting.
+- Guy reports the recording folder was set in the extension settings, but `ecamm_recording_status` still shows `folders: []`. Unresolved: the extension may need a restart, or the value did not save. No recording tool has run on the Mac yet.
+- Guy is asleep. Nothing was run on the Mac after this point: no go-live, no recording.
+
 ## Claude update 3, November 10, 2026 (11:15 PM Pacific)
 
 Real Ecamm 4.6.2, iMac Pro, Record Only, test build of `0b151e9`. One session, 11:06 PM.
