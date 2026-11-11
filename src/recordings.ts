@@ -5,6 +5,7 @@ import { link, mkdir, open, readdir, realpath, stat, unlink } from 'node:fs/prom
 import { homedir, hostname } from 'node:os'
 import { isAbsolute, join, relative, sep } from 'node:path'
 import { z } from 'zod'
+import { envValue } from './env.js'
 
 const eventSchema = z.object({
   version: z.literal(1), id: z.string().regex(/^[a-f0-9]{64}$/),
@@ -15,19 +16,21 @@ export type RecordingEvent = z.infer<typeof eventSchema>
 export interface RecordingOptions { roots: string[]; inbox: string; ffprobe: string }
 
 export function recordingOptions(env: NodeJS.ProcessEnv = process.env): RecordingOptions {
-  const roots = env.ECAMM_RECORDING_ROOTS
-    ? z.array(z.string().min(1).refine(isAbsolute, 'Recording folders must be absolute paths')).max(20).parse(JSON.parse(env.ECAMM_RECORDING_ROOTS))
-    : env.ECAMM_RECORDING_FOLDER ? [z.string().refine(isAbsolute, 'Recording folder must be an absolute path').parse(env.ECAMM_RECORDING_FOLDER)] : []
+  const configuredRoots = envValue(env.ECAMM_RECORDING_ROOTS)
+  const folder = envValue(env.ECAMM_RECORDING_FOLDER)
+  const roots = configuredRoots
+    ? z.array(z.string().min(1).refine(isAbsolute, 'Recording folders must be absolute paths')).max(20).parse(JSON.parse(configuredRoots))
+    : folder ? [z.string().refine(isAbsolute, 'Recording folder must be an absolute path').parse(folder)] : []
   return {
     roots,
-    inbox: env.ECAMM_RECORDING_INBOX || join(homedir(), '.ecamm-mcp', 'recording-events'),
-    ffprobe: env.ECAMM_FFPROBE || 'ffprobe',
+    inbox: envValue(env.ECAMM_RECORDING_INBOX) || join(homedir(), '.ecamm-mcp', 'recording-events'),
+    ffprobe: envValue(env.ECAMM_FFPROBE) || 'ffprobe',
   }
 }
 
 /** All media access is opt-in and local. Canonicalize both roots and requested paths. */
 export async function allowedRecording(path: string, roots: string[]): Promise<string> {
-  if (!roots.length) throw new Error('Recording access is not configured. Set ECAMM_RECORDING_ROOTS to a JSON array of recording folders on this Mac.')
+  if (!roots.length) throw new Error('Recording access is not configured. Set the extension Recording folder or ECAMM_RECORDING_FOLDER to its absolute path on this Mac.')
   if (!isAbsolute(path)) throw new Error('Use an absolute recording path on this Mac.')
   const canonical = await realpath(path)
   for (const root of roots) {

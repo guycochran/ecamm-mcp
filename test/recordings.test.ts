@@ -36,6 +36,11 @@ describe('recording folder boundary', () => {
     expect(() => recordingOptions({ ECAMM_RECORDING_ROOTS: '["relative"]' })).toThrow()
     expect(() => recordingOptions({ ECAMM_RECORDING_ROOTS: 'not json' })).toThrow()
   })
+  it('treats unfilled desktop extension settings as unset', () => {
+    const options = recordingOptions({ ECAMM_RECORDING_FOLDER: '${user_config.recording_folder}', ECAMM_FFPROBE: '${user_config.ffprobe}' })
+    expect(options.roots).toEqual([])
+    expect(options.ffprobe).toBe('ffprobe')
+  })
 })
 
 describe('persistent completion inbox', () => {

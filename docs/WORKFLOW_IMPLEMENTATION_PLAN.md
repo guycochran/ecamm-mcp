@@ -3,6 +3,8 @@
 Research date: November 10, 2026. Status: proposed work, not shipped functionality.
 Companion to [CLAUDE_HANDOFF.md](CLAUDE_HANDOFF.md) and [RESEARCH.md](RESEARCH.md).
 
+Implementation follow-up: `codex/ecamm-recording-workflows` now implements a first read-only preparation report, completion inbox/helper, metadata inspection, and explicit-file receipts. See [usage and actual limits](RECORDING_WORKFLOWS.md). The broader steps below remain a roadmap, including cue execution, guest layouts, automatic asset association, marker reconciliation, and template onboarding.
+
 ## Objective
 
 Make three workflows dependable: prepare a worship service or interview, mark useful moments, and hand finished recordings to an editor. Use existing Ecamm production setups first. Explain which checks were observed, which the operator confirmed, and which remain unavailable.

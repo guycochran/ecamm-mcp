@@ -76,6 +76,10 @@ Implemented separate modules for read-only intent-aware preparation, a persisten
 
 The completion helper is usable without a running chat. Media inspection requires externally installed ffprobe; no automatic installer or signed Shortcut is included. Associated tracks must be explicitly supplied. No media transfer, guest admission, profile creation, or recording-preference automation is implemented. Real-Ecamm and actual media-decoding acceptance remain outstanding.
 
+Integrated onto Claude's PR #9 head `0bf8df66ed1135dbf34e6e6a0c4df18b594ebf42`. The combined build and extension packaging passed; the full combined simulator suite passed **163 tests**. After an optional-setting normalization fix, **28 targeted recording/workflow tests** passed. An additional MCP preparation integration test checks that record-only preparation issues no production writes or destination queries. The follow-up keeps the existing scene-sheet registrar and command-ordering changes intact. Version remains 0.2.3 and no release is published.
+
+Packaged combined server integration: **48 passed**. Rebuilt after optional-setting normalization and reran all **4 new packaged workflow integration tests**, which passed. The media inspector in these tests is a deterministic fixture, not real ffprobe decoding.
+
 ### Earlier API-alignment work
 
 1. Corrected marker and recording-pause endpoint names against the official API and the installed Stream Deck plugin.
