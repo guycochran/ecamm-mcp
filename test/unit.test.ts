@@ -279,19 +279,41 @@ describe('preflight', () => {
   }
   const warned = (r: ReturnType<typeof preflight>) => r.checks.filter((c) => c.status === 'warn').map((c) => c.check)
 
-  it('is ready when nothing is wrong', () => {
+  it('reports no problems seen, never "ready", and lists what it cannot check', () => {
     const r = preflight(base)
-    expect(r.ready).toBe(true)
+    expect(r.verdict).toBe('no_problems_seen')
+    expect(r).not.toHaveProperty('ready')
+    expect(r.summary).not.toMatch(/ready/i)
+    expect(r.notChecked.join(' ')).toMatch(/sound/i)
+    expect(r.intent).toBe('go_live')
     expect(r.checks.find((c) => c.check === 'Overlays')!.detail).toContain('Logo')
+    expect(r.checks.find((c) => c.check === 'Mic')!.detail).toMatch(/setting/)
   })
   it('flags silence, missing destination, preview mode and an existing broadcast', () => {
     const r = preflight({
       ...base,
+      intent: 'go_live',
       info: { ...base.info, ButtonLabel: 'Finish', Mute: 'yes', MUTE_MIC: 'yes', PreviewMode: 'yes' },
       destinations: [],
     })
-    expect(r.ready).toBe(false)
+    expect(r.verdict).toBe('problems_found')
     expect(warned(r)).toEqual(['On-air state', 'Main output', 'Mic', 'Destinations', 'Preview mode'])
+  })
+  it('keeps unknown values unknown instead of assuming they are fine', () => {
+    const r = preflight({ info: { ButtonLabel: 'Aufnehmen' }, sceneTitle: undefined, destinations: undefined, overlays: undefined })
+    const unknown = r.checks.filter((c) => c.status === 'unknown').map((c) => c.check)
+    expect(unknown).toEqual(['On-air state', 'Scene', 'Main output', 'Mic', 'Destinations', 'Preview mode', 'Overlays'])
+    expect(warned(r)).toEqual([])
+    expect(r.verdict).toBe('incomplete')
+    expect(r.intent).toBe('unknown')
+  })
+  it('does not ask a recording for a streaming destination', () => {
+    const rec = preflight({ ...base, info: { ...base.info, ButtonLabel: 'Record' }, destinations: [] })
+    expect(rec.intent).toBe('record')
+    expect(rec.verdict).toBe('no_problems_seen')
+    expect(rec.checks.find((c) => c.check === 'Destinations')).toMatchObject({ status: 'info' })
+    const live = preflight({ ...base, destinations: [] })
+    expect(warned(live)).toEqual(['Destinations'])
   })
   it('flags a mic at zero', () => {
     expect(warned(preflight({ ...base, info: { ...base.info, VOLUME_MIC: '0' } }))).toEqual(['Mic'])

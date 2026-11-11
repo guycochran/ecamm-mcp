@@ -1,6 +1,7 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { z } from 'zod'
 import { buildSceneSheet, type SheetCell } from './sheet.js'
+import { cueStepSchema, MAX_CUE_STEPS, planCue, runCue, type CueStep } from './cue.js'
 import { AUDIO_BUSES, apiAudioBus, EcammClient, onAirState, planMainButton, preflight, resolveItem, scalar, summarizeInfo, yes, type BroadcastIntent, type Item, type ThumbnailRefresh, type ThumbnailStatus } from './client.js'
 import { EcammError } from './http.js'
 
@@ -86,19 +87,23 @@ export function registerTools(server: McpServer, client: EcammClient, opts: { re
     'ecamm_preflight',
     {
       description:
-        'Pre-show checklist. One read-only call that reports whether Ecamm is ready to go live and flags problems: already on air, main output or mic muted, mic at 0, no destination, Preview Mode left on. Run it before going live or when the user asks "am I ready?"',
-      inputSchema: {},
+        'Pre-show check. One read-only call that reports problems Ecamm itself can see: already on air, main output or mic muted, mic level 0, no destination when going live, Preview Mode left on. ' +
+        'It reports settings, not signals: it cannot hear the mic, see the camera or test the connection, and it lists what it did not check. Anything Ecamm did not report comes back as unknown, not as fine. ' +
+        'Do not tell the person they are "ready" on the strength of this alone; say what was checked and what was not. ' +
+        'intent says whether they are about to go live or record (a recording needs no destination); left out, it is inferred from the main button. For a fuller interview or service plan use ecamm_prepare_session.',
+      inputSchema: { intent: z.enum(['go_live', 'record']).optional() },
       annotations: ann('read', 'Pre-show check'),
     },
-    wrap('read', async () => {
+    wrap('read', async ({ intent }: { intent?: 'go_live' | 'record' }) => {
       const info = await client.info(true)
+      // A failed read stays undefined. It must not turn into an empty list, which would read as "none set up".
       const [scenes, destinations, overlays, mode] = await Promise.all([
-        client.scenes().catch(() => [] as Item[]),
-        client.channels().catch(() => [] as Item[]),
-        client.overlays().catch(() => [] as Item[]),
+        client.scenes().catch(() => undefined),
+        client.channels().catch(() => undefined),
+        client.overlays().catch(() => undefined),
         client.get('getCurrentMode').catch(() => undefined),
       ])
-      const scene = scenes.find((s) => s.id === String(info.CurrentScene ?? ''))
+      const scene = scenes?.find((s) => s.id === String(info.CurrentScene ?? ''))
       return text(
         preflight({
           info,
@@ -106,6 +111,7 @@ export function registerTools(server: McpServer, client: EcammClient, opts: { re
           sourceMode: scalar(mode) || undefined,
           destinations,
           overlays,
+          intent,
         }),
       )
     }),
@@ -342,24 +348,13 @@ export function registerTools(server: McpServer, client: EcammClient, opts: { re
   server.registerTool(
     'ecamm_set_overlay_text',
     {
-      description: 'Replace the text of an existing text or fixed overlay in the CURRENT scene, preserving its styling. Does not create or show the overlay. Requires an Ecamm version supporting setOverlayText. Reports acceptance, not verified rendered text.',
+      description: 'Replace the text of an existing text or fixed overlay in the CURRENT scene, preserving its styling. Does not create or show the overlay. Requires an Ecamm version supporting setOverlayText. Reports verified when Ecamm then lists the overlay under the new text (plain text overlays do), otherwise accepted.',
       inputSchema: { overlay: z.string().trim().min(1), text: z.string().min(1) },
       annotations: ann('show', 'Update overlay text'),
     },
     wrap('show', async ({ overlay, text: value }: { overlay: string; text: string }) => {
       const ov = resolveItem(await client.overlays(), overlay, 'overlay')
-      await client.set('setOverlayText', { id: ov.id, text: value })
-      // On a real Ecamm (4.6.2) a text overlay's title in the overlay list is its text, so
-      // the list is a readback. Other overlay kinds may keep their own title: then this
-      // stays unverified rather than failed.
-      let titleNow: string | undefined
-      const deadline = Date.now() + 1500
-      while (Date.now() < deadline) {
-        titleNow = (await client.overlays()).find((o) => o.id === ov.id)?.title
-        if (titleNow === value) break
-        await new Promise((r) => setTimeout(r, 150))
-      }
-      const verified = titleNow === value
+      const verified = await client.setOverlayText(ov.id, value)
       return text({
         overlay: ov.title, id: ov.id, text: value, accepted: true, verified,
         note: verified
@@ -501,6 +496,59 @@ export function registerTools(server: McpServer, client: EcammClient, opts: { re
       await client.set('setAddMarker', { text: t, dialogbox: 'false' })
       return text({ marker: t ?? '(untitled)', accepted: true, verified: false,
         note: 'Ecamm accepted the marker request. The Remote API does not verify that it was saved to the recording marker file.' })
+    }),
+  )
+
+  const cueInput = {
+    steps: z.array(cueStepSchema).min(1).max(MAX_CUE_STEPS).describe(
+      'In order. Each step is one of: {do:"scene",scene}, {do:"overlay",overlay,state:"show"|"hide"}, {do:"overlay_text",overlay,text}, {do:"mute",muted,bus?}, {do:"volume",bus,volume}, {do:"wait",seconds}.',
+    ),
+  }
+
+  server.registerTool(
+    'ecamm_plan_cue',
+    {
+      description:
+        'Check a cue without running it. A cue is up to 12 ordinary preparation steps in order: switch scene, show or hide an overlay, change an overlay\'s text, mute or unmute, set a level, wait. ' +
+        'Returns the ordered plan and any step that refers to something that does not exist. Overlays named after a scene change can only be checked once that scene is on screen, and are marked "later". ' +
+        'Changes nothing. Use it to show the person the plan before ecamm_run_cue. Cues cannot go live, record, end, post comments, switch profiles or control Zoom.',
+      inputSchema: cueInput,
+      annotations: ann('read', 'Check a cue'),
+    },
+    wrap('read', async ({ steps }: { steps: CueStep[] }) => {
+      const plan = await planCue(client, steps)
+      return text({ ...plan, changedEcamm: false, note: plan.ok ? 'Nothing was changed. Run it with ecamm_run_cue.' : 'Nothing was changed. Fix the problems before running it.' })
+    }),
+  )
+
+  server.registerTool(
+    'ecamm_run_cue',
+    {
+      description:
+        'Run a cue: up to 12 ordinary preparation steps in order (switch scene, show or hide an overlay, change an overlay\'s text, mute or unmute, set a level, wait up to 30 s each and 60 s in total). ' +
+        'Example: "use Guest Split, change the guest lower third to Renée, show it, set music to 15". ' +
+        'Everything is checked first; if any step refers to something missing, nothing runs. It then runs the steps one at a time, with no other change from this server in between, ' +
+        'stops at the first step that fails, and stops without doing more if someone else changes the scene. Each step reports verified, accepted, failed or not_run. Nothing is rolled back. ' +
+        'It runs whether or not Ecamm is live, exactly as the individual tools do, so while live the audience sees each step. It cannot go live, record, end, post comments, switch profiles or control Zoom; ask for those separately. ' +
+        'Timing is approximate. Use a button for a cut that has to land on a beat.',
+      inputSchema: cueInput,
+      annotations: ann('show', 'Run a cue'),
+    },
+    wrap('show', async ({ steps }: { steps: CueStep[] }) => {
+      const plan = await planCue(client, steps)
+      if (!plan.ok) return text({ ran: false, changedEcamm: false, problems: plan.problems, steps: plan.steps, note: 'Nothing was run, because the cue refers to something that could not be found.' })
+      const result = await runCue(client, steps)
+      return text({
+        ran: true,
+        startedOn: plan.startingScene,
+        sceneNow: result.sceneNow,
+        completed: `${result.completed} of ${steps.length}`,
+        ...(result.stopped ? { stoppedEarly: result.stopped } : {}),
+        steps: result.steps,
+        note: result.stopped
+          ? 'Steps already done were not undone. Check Ecamm before running the rest.'
+          : 'All steps ran. "verified" was read back from Ecamm; "accepted" means Ecamm took it and there was nothing to read back.',
+      })
     }),
   )
 

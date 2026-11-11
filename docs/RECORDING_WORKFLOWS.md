@@ -85,7 +85,18 @@ The receipt is returned in chat as structured data. It does not write an export 
 
 Embedded cover art is excluded when deciding whether a file contains a video track. Hard links to the same underlying file are flagged as duplicates, even when their paths differ.
 
-`metadata_checked` means that the listed media passed basic metadata checks. It does not prove full decoding, usable sound, complete recording, matching timelines, or that every expected track was listed. No automatic ISO association, marker parsing, silence detection, backup verification, or editor transfer is implemented yet.
+`metadata_checked` means that the listed media passed basic metadata checks. It does not prove full decoding, usable sound, complete recording, matching timelines, or that every expected track was listed. No automatic ISO association, silence detection, backup verification, or editor transfer is implemented yet.
+
+## Markers and comment files
+
+Ecamm saves two small files beside a recording, under exactly the same name. Both layouts below were read from files a real Ecamm 4.6.2 wrote; sanitized copies are in `test/fixtures`.
+
+- **Markers, `.txt`:** one line per marker, `HH:MM:SS`, then a tab and the text if the marker has any. Ecamm writes `Start` at `00:00:00` itself.
+- **Comments shown on screen, `.srt`:** one subtitle cue per comment that was put on screen during a broadcast.
+
+`ecamm_read_markers` takes the path of a marker `.txt` inside the recording folder and returns each marker with its time in seconds, its timecode and its text, plus ready-made `time text` lines for a description. `ecamm_prepare_edit_handoff` attaches the marker and comment files for the main recording when they sit beside it under exactly the same name; a near miss is not attached.
+
+A file in any other layout is reported as unrecognized and nothing is inferred from it. Still unverified: how marker times behave across a pause, and what a split into a new file does to them. A split was seen to start a new recording file with its own timestamp in its name.
 
 ## Troubleshooting
 

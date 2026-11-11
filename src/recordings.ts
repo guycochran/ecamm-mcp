@@ -1,9 +1,9 @@
 import { createHash, randomUUID } from 'node:crypto'
 import { execFile } from 'node:child_process'
 import { constants, type Stats } from 'node:fs'
-import { link, mkdir, open, readdir, realpath, stat, unlink } from 'node:fs/promises'
+import { link, mkdir, open, readdir, readFile, realpath, stat, unlink } from 'node:fs/promises'
 import { homedir, hostname } from 'node:os'
-import { isAbsolute, join, relative, sep } from 'node:path'
+import { extname, isAbsolute, join, relative, sep } from 'node:path'
 import { z } from 'zod'
 import { envValue } from './env.js'
 
@@ -156,6 +156,64 @@ export async function inspectRecording(path: string, opts: RecordingOptions, pro
   }
 }
 
+export interface Marker { seconds: number; timecode: string; text: string }
+
+/**
+ * Ecamm's marker file, as written by 4.6.2 beside a recording: one marker per line,
+ * HH:MM:SS, then a tab and the text when there is any. Ecamm adds "Start" at 00:00:00.
+ * Anything that does not fit is returned as unparsed and the file is called unrecognized,
+ * so a different or future layout is never half-read as if it were understood.
+ */
+export function parseMarkerFile(text: string): { format: 'ecamm-markers-v1' | 'unrecognized'; markers: Marker[]; unparsed: string[] } {
+  const markers: Marker[] = []
+  const unparsed: string[] = []
+  for (const raw of text.split('\n')) {
+    const line = raw.replace(/\r$/, '')
+    if (!line) continue
+    const m = /^(\d{2,3}):([0-5]\d):([0-5]\d)(?:\t(.*))?$/.exec(line)
+    if (!m) { unparsed.push(line.slice(0, 200)); continue }
+    markers.push({ seconds: Number(m[1]) * 3600 + Number(m[2]) * 60 + Number(m[3]), timecode: `${m[1]}:${m[2]}:${m[3]}`, text: m[4] ?? '' })
+  }
+  return { format: markers.length && !unparsed.length ? 'ecamm-markers-v1' : 'unrecognized', markers, unparsed: unparsed.slice(0, 20) }
+}
+
+const MARKER_LIMITS = [
+  'Times are as Ecamm wrote them, counted from the start of the recording this file sits beside.',
+  'How marker times behave across a pause, or after a split into a new file, has not been verified. Check one against the picture before relying on them for an edit.',
+]
+
+/** Read a marker file inside the configured recording folders. Never writes. */
+export async function readMarkers(path: string, opts: RecordingOptions) {
+  const canonical = await allowedRecording(path, opts.roots)
+  if (extname(canonical).toLowerCase() !== '.txt') throw new Error('Marker files end in .txt and sit beside the recording with the same name.')
+  if ((await stat(canonical)).size > 262144) throw new Error('That file is larger than a marker file should be (256 KB limit).')
+  const parsed = parseMarkerFile(await readFile(canonical, 'utf8'))
+  const titled = parsed.markers.filter((m) => m.text)
+  return {
+    path: canonical, ...parsed,
+    // A convenience for descriptions. YouTube has its own rules for chapters (first at 0:00, minimum count and spacing).
+    chapterLines: parsed.format === 'ecamm-markers-v1' ? titled.map((m) => `${m.timecode.replace(/^00:/, '')} ${m.text}`) : [],
+    limitations: parsed.format === 'ecamm-markers-v1' ? MARKER_LIMITS : ['This file does not match the marker layout this tool knows. Nothing was inferred from it.'],
+  }
+}
+
+/**
+ * Files Ecamm saves beside a recording under exactly the same name: markers (.txt) and
+ * shown comments (.srt). Only an exact name match counts. Separate-track files are not
+ * looked for, because their naming has not been observed.
+ */
+export async function sidecarsOf(recordingPath: string, opts: RecordingOptions) {
+  const base = recordingPath.slice(0, recordingPath.length - extname(recordingPath).length)
+  const found: { markers?: Awaited<ReturnType<typeof readMarkers>>; comments?: { path: string }; problems: string[] } = { problems: [] }
+  for (const [ext, kind] of [['.txt', 'markers'], ['.srt', 'comments']] as const) {
+    let canonical: string
+    try { canonical = await allowedRecording(base + ext, opts.roots) } catch { continue } // not there, or not ours to read
+    if (kind === 'comments') found.comments = { path: canonical }
+    else try { found.markers = await readMarkers(canonical, opts) } catch (err) { found.problems.push(err instanceof Error ? err.message : String(err)) }
+  }
+  return found
+}
+
 export interface ExpectedAsset { label: string; kind: 'program' | 'video' | 'audio'; path?: string }
 export async function prepareHandoff(eventIdValue: string, assets: ExpectedAsset[], opts: RecordingOptions, probe?: Probe) {
   if (!/^[a-f0-9]{64}$/.test(eventIdValue)) throw new Error('Invalid recording event ID.')
@@ -188,11 +246,13 @@ export async function prepareHandoff(eventIdValue: string, assets: ExpectedAsset
       result.push({ ...asset, status: media.status === 'changing' ? 'pending' : !matches || !media.durationSeconds ? 'needs_check' : 'metadata_checked', media })
     } catch (err) { result.push({ ...asset, status: 'unavailable', detail: err instanceof Error ? err.message : String(err) }) }
   }
+  const sidecars = await sidecarsOf(main.path, opts)
   return {
-    version: 1, event, main, assets: result,
+    version: 1, event, main, assets: result, sidecars,
     assessment: main.status === 'changing' || !main.hasVideo || !main.hasAudio || !main.durationSeconds || result.some(a => a.status !== 'metadata_checked')
       ? 'needs_attention' : 'listed_media_metadata_checked',
-    limitations: ['Only explicitly supplied files were associated with this session. No automatic ISO or marker matching was performed.',
+    limitations: ['Only explicitly supplied media files were associated with this session. No separate-track (ISO) matching was performed.',
+      'Marker and comment files are attached only when they sit beside the main recording under exactly the same name.',
       'An empty expected-assets list does not establish that all session tracks are present.',
       'This receipt neither transfers files nor verifies backup, editing import, or audio/video synchronization.'],
   }

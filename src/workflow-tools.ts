@@ -1,7 +1,7 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { z } from 'zod'
 import { type EcammClient, scalar } from './client.js'
-import { inspectRecording, listRecordings, prepareHandoff, recordingDoctor, recordingOptions } from './recordings.js'
+import { inspectRecording, listRecordings, prepareHandoff, readMarkers, recordingDoctor, recordingOptions } from './recordings.js'
 
 const intentSchema = z.enum(['record_only', 'stream_and_record', 'stream_only', 'present'])
 export type SessionIntent = z.infer<typeof intentSchema>
@@ -82,6 +82,10 @@ export function registerWorkflowTools(server: McpServer, client: EcammClient) {
     description: 'Inspect local recording metadata without changing the file. Requires configured ECAMM_RECORDING_ROOTS and ffprobe. Reports audio/video stream presence, not audible speech or finalization. Paths belong to this MCP Mac, not a remote Ecamm Mac.',
     inputSchema: { path: z.string().min(1).max(4096) }, annotations,
   }, safe(async ({ path }) => inspectRecording(path, recordingOptions())))
+  server.registerTool('ecamm_read_markers', {
+    description: 'Read the marker file Ecamm saves beside a recording (same name, .txt) and return each marker with its time and text. Requires the recording folder to be configured. Read-only. Understands the layout Ecamm 4.6.2 writes; any other layout is reported as unrecognized, not guessed at. Marker times across a pause or split are unverified.',
+    inputSchema: { path: z.string().min(1).max(4096) }, annotations,
+  }, safe(async ({ path }) => readMarkers(path, recordingOptions())))
   server.registerTool('ecamm_prepare_edit_handoff', {
     description: 'Return a recording receipt for a known completion event and explicitly supplied associated files. List every expected separate track; omit its path to flag it as needing a file. Does not match tracks automatically, copy/upload files, or launch an editor.',
     inputSchema: {

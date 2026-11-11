@@ -4,7 +4,7 @@
   "display_name": "Ecamm Live",
   "version": "0.2.3",
   "description": "Run Ecamm Live from Claude: scenes, overlays, audio, sound effects, markers, go live and record.",
-  "long_description": "Lets Claude control Ecamm Live on this Mac through Ecamm's own Remote Control feature (the one Stream Deck and Companion use). Type what you want: check you're ready before a show, ask for a scene by name, show or hide overlays, mute and set volumes, fire sound effects, drop markers, run Ecamm for Zoom, and start or stop a broadcast or recording.\n\nThe first time Claude connects to Ecamm Live, Ecamm asks \"Claude (ecamm-mcp) Wants To Control Ecamm\". Click Allow.\n\nAnything that goes on air (go live, end, record, public comments) is a dry run until you confirm it. Community project, not affiliated with Ecamm Network.",
+  "long_description": "Lets Claude control Ecamm Live on this Mac through Ecamm's own Remote Control feature (the one Stream Deck and Companion use). Type what you want: check your setup before a show, ask for a scene by name, show or hide overlays, mute and set volumes, fire sound effects, drop markers, run Ecamm for Zoom, and start or stop a broadcast or recording.\n\nThe first time Claude connects to Ecamm Live, Ecamm asks \"Claude (ecamm-mcp) Wants To Control Ecamm\". Click Allow.\n\nAnything that goes on air (go live, end, record, public comments) is a dry run until you confirm it. Community project, not affiliated with Ecamm Network.",
   "author": {
     "name": "Guy Cochran",
     "url": "https://github.com/guycochran"
@@ -63,7 +63,12 @@
     }
   },
   "tools": [
-    { "name": "ecamm_preflight", "description": "Pre-show check: flags a muted mic, no destination, Preview Mode left on" },
+    { "name": "ecamm_preflight", "description": "Pre-show check: problems Ecamm can see, what it could not read, and what it does not check" },
+    { "name": "ecamm_prepare_session", "description": "Read-only preparation report for a recording, stream or presentation" },
+    { "name": "ecamm_plan_cue", "description": "Check a short list of preparation steps without running them" },
+    { "name": "ecamm_run_cue", "description": "Run up to 12 preparation steps in order; cannot go live, record or end" },
+    { "name": "ecamm_set_overlay_text", "description": "Change the text of an existing overlay" },
+    { "name": "ecamm_read_markers", "description": "Read the marker file saved beside a recording" },
     { "name": "ecamm_scene_sheet", "description": "One labeled picture of every scene, for checking your setup from anywhere" },
     { "name": "ecamm_refresh_scene_sheet", "description": "Switch through every scene to get current pictures, then return to where you were" },
     { "name": "ecamm_status", "description": "Live or not, current scene, viewers, mutes and volumes" },

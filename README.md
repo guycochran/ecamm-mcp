@@ -2,7 +2,7 @@
 
 Run **Ecamm Live** from a chat with Claude. Type what you want in plain words and it happens.
 
-"Am I ready to go live?" "Switch to my guest scene." "Show the lower third." "Drop a marker called Q&A."
+"Check my setup before I go live." "Switch to my guest scene." "Show the lower third." "Drop a marker called Q&A."
 
 It isn't a replacement for your Stream Deck. A button is still the fastest way to cut a scene on a beat. This is for what buttons can't do: checking your setup before a show, running several steps from one sentence, checking on your studio Mac from your phone, and anything you'd rather describe than program.
 
@@ -56,7 +56,7 @@ Type these into Claude. Use your own scene, overlay and sound names.
 
 **Before the show**
 
-- "Am I ready to go live?"
+- "Check my setup before I go live."
 - "What scenes do I have?"
 - "Show me a picture of all my scenes." Add "and refresh them" for current pictures; that switches through each scene.
 - "Show me a thumbnail of the Interview scene." (current only for the scene you're on; see [Check your studio from your phone](#check-your-studio-from-your-phone))
@@ -100,14 +100,29 @@ What you need to know:
 
 Development branch: [recording and interview workflows](docs/RECORDING_WORKFLOWS.md) add intent-aware preparation and optional recording-file receipts. These are not yet part of the published release; separate-track setup and real-device validation remain manual.
 
-Ask "am I ready to go live?" and you get one answer instead of a wall of settings. It flags what viewers would notice:
+Ask "check my setup before I go live" and you get one answer instead of a wall of settings. It flags the problems Ecamm itself can see:
 
-- Main output or mic muted, or mic at zero
-- No streaming destination set up
+- Main output or mic muted, or mic level at zero
+- No streaming destination set up, when you're going live. A recording doesn't need one
 - Preview Mode left on
 - A broadcast or recording already running
 
-It also tells you which scene you'll start on and which overlays are showing. It only reads. It never changes anything.
+It also tells you which scene you're on and which overlays are showing. It only reads. It never changes anything.
+
+What it won't do is tell you you're "ready". It reads settings, not signals: it can't hear your mic, see your camera or test your connection, and it says so in a short list of what it didn't check. If Ecamm doesn't report something, the answer is "unknown", not "fine".
+
+## Run a few steps as one cue
+
+"Use Guest Split, change the guest lower third to Renée, show it, and set music to 15."
+
+That's a cue: up to 12 ordinary steps, run in order. Switch scene, show or hide an overlay, change an overlay's text, mute or unmute, set a level, wait.
+
+- **Checked first.** If a step names a scene that doesn't exist, nothing runs. You can ask to see the plan without running it.
+- **One step at a time, nothing else in between,** and each step reports whether Ecamm confirmed it.
+- **It stops at the first step that fails,** and tells you what ran and what didn't. Nothing is undone.
+- **If you change the scene yourself partway through, it stops** and leaves your choice alone.
+- **It can't go live, record, end, post a comment, switch profiles or touch Zoom.** Those stay separate requests.
+- **Timing is approximate.** A cue takes a few seconds per step. Use a button for a cut that has to land on a beat.
 
 ## It won't take you live by accident
 
@@ -156,7 +171,9 @@ Still stuck? [Open an issue](https://github.com/guycochran/ecamm-mcp/issues).
 
 | Tool | Does |
 | --- | --- |
-| `ecamm_preflight` | Pre-show check: ready or not, and what to fix |
+| `ecamm_preflight` | Pre-show check: the problems Ecamm can see, what it couldn't read, and what it doesn't check |
+| `ecamm_plan_cue`, `ecamm_run_cue` | Check, then run, up to 12 ordinary steps in order. Cannot go live, record, end or post |
+| `ecamm_read_markers` | Read the marker file Ecamm saves beside a recording |
 | `ecamm_status` | Live or not, current scene, viewers, preview mode, mutes, volumes, Zoom state |
 | `ecamm_list_scenes`, `ecamm_list_overlays`, `ecamm_list` | Scenes, overlays in the current scene, cameras, videos, sounds, audio filters, profiles, destinations |
 | `ecamm_scene_sheet` | One labeled picture of every scene, plus a numbered list, from the thumbnails Ecamm already has. Changes nothing |
@@ -190,7 +207,7 @@ Things it handles so you don't have to:
 - **English labels only, for now.** Ecamm 4.6 added other languages. If your Ecamm isn't in English the button labels may differ, and this tool will then refuse to go live, end, or refresh scene pictures, because it won't act on a label it can't read. Status, scenes, overlays and audio are unaffected. Please open an issue with the labels you see.
 - Ecamm documents this API in its [Automating Ecamm](https://support.ecamm.com/en/articles/17683976-automating-ecamm) help article. This project isn't made by Ecamm, so a future Ecamm update could still get ahead of it.
 - A mute you set by hand may not survive a scene change. Seen once in testing; scenes appear to carry their own audio settings.
-- **Marker persistence needs a new real-device test.** Earlier builds used a different endpoint from the one documented by Ecamm. The current source uses `setAddMarker`, also found in Ecamm's bundled Stream Deck plugin. The tool reports acceptance, not verified marker-file creation.
+- **Markers go to Ecamm's marker file, not to YouTube.** Ecamm saves a `.txt` beside the recording, one line per marker. Versions through 0.2.3 used a command Ecamm ignored; the corrected one was seen writing the file on a real Ecamm. The marker tool still reports only that Ecamm accepted it, because the Remote API has no way to read the file back.
 - **Overlay text changes an existing overlay; it doesn't create one**, and it doesn't change whether the overlay is showing. For a plain text overlay Ecamm lists the overlay under its new text, which is how the change is confirmed. Older Ecamm versions may not support it.
 - A scene's thumbnail only updates while that scene is on screen, so a thumbnail of any other scene may be out of date.
 - A bus that doesn't exist reports as unmuted.

@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { link, mkdtemp, mkdir, readFile, readdir, rename, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { allowedRecording, inspectRecording, listRecordings, mediaProbe, prepareHandoff, receiveRecording, recordingDoctor, recordingOptions, type RecordingOptions } from '../src/recordings.js'
+import { allowedRecording, inspectRecording, listRecordings, mediaProbe, parseMarkerFile, prepareHandoff, readMarkers, receiveRecording, recordingDoctor, recordingOptions, sidecarsOf, type RecordingOptions } from '../src/recordings.js'
 
 const video = async () => ({ streams: [{ codec_type: 'video', width: 1920, height: 1080 }, { codec_type: 'audio', channels: 2 }], format: { duration: '12.5', format_name: 'mov,mp4' } })
 let directory: string, root: string, movie: string, opts: RecordingOptions
@@ -137,7 +137,7 @@ describe('inspection and edit receipts', () => {
     const audio = join(root, 'guest.m4a'); await writeFile(audio, 'audio')
     const result = await prepareHandoff(event.eventId, [{ label: 'Guest audio', kind: 'audio', path: audio }], opts, video)
     expect(result.assessment).toBe('listed_media_metadata_checked')
-    expect(result.limitations.join(' ')).toContain('No automatic ISO or marker matching')
+    expect(result.limitations.join(' ')).toContain('No separate-track (ISO) matching')
   })
   it('reports a program without audio as needing attention', async () => {
     const event = await receiveRecording(movie, opts)
@@ -146,4 +146,48 @@ describe('inspection and edit receipts', () => {
   })
   it('rejects event path traversal', async () => { await expect(prepareHandoff('../../private', [], opts, video)).rejects.toThrow('Invalid') })
   it('explains a missing media inspector', async () => { await expect(mediaProbe('/missing/ffprobe')(movie)).rejects.toThrow('requires ffprobe') })
+})
+
+describe('marker files, from the layout a real Ecamm 4.6.2 wrote', () => {
+  const fixture = () => readFile(join(__dirname, 'fixtures', 'ecamm-markers-4.6.2.txt'), 'utf8')
+
+  it('parses time, tab, text, and a marker with no text', async () => {
+    const parsed = parseMarkerFile(await fixture())
+    expect(parsed.format).toBe('ecamm-markers-v1')
+    expect(parsed.markers).toEqual([
+      { seconds: 0, timecode: '00:00:00', text: 'Start' },
+      { seconds: 54, timecode: '00:00:54', text: '' },
+      { seconds: 72, timecode: '00:01:12', text: 'segment two' },
+    ])
+  })
+  it('keeps tabs and unicode inside marker text, and tolerates CRLF', () => {
+    const parsed = parseMarkerFile('00:00:00\tStart\r\n01:02:03\tRenée\tQ&A ✓\r\n')
+    expect(parsed.markers[1]).toEqual({ seconds: 3723, timecode: '01:02:03', text: 'Renée\tQ&A ✓' })
+  })
+  it('calls any other layout unrecognized instead of half-reading it', () => {
+    for (const text of ['', 'Start at 0:00\n', '00:00:00 Start\n', '0:00\tStart\n', '00:00:00\tStart\nnot a marker\n', '{"markers":[]}']) {
+      expect(parseMarkerFile(text).format).toBe('unrecognized')
+    }
+    expect(parseMarkerFile('00:00:00\tStart\nnot a marker\n').unparsed).toEqual(['not a marker'])
+  })
+  it('reads a marker file only inside the recording folder, and only a .txt', async () => {
+    const markers = join(root, 'Interview Renée $(do not run).txt')
+    await writeFile(markers, await fixture())
+    const read = await readMarkers(markers, opts)
+    expect(read.markers).toHaveLength(3)
+    expect(read.chapterLines).toEqual(['00:00 Start', '01:12 segment two'])
+    expect(read.limitations.join(' ')).toMatch(/pause/)
+    await expect(readMarkers(movie, opts)).rejects.toThrow('.txt')
+    const outside = join(directory, 'elsewhere.txt'); await writeFile(outside, await fixture())
+    await expect(readMarkers(outside, opts)).rejects.toThrow('outside')
+  })
+  it('attaches sidecars only on an exact name match beside the recording', async () => {
+    expect(await sidecarsOf(movie, opts)).toEqual({ problems: [] })
+    await writeFile(join(root, 'Interview Renée $(do not run).txt'), await fixture())
+    await writeFile(join(root, 'Interview Renée $(do not run).srt'), '1\n00:00:43,000 --> 00:00:48,000\n@ExampleViewer: test\n\n')
+    await writeFile(join(root, 'Interview Renée $(do not run) 2.txt'), await fixture()) // near miss: must not attach
+    const found = await sidecarsOf(movie, opts)
+    expect(found.markers?.markers).toHaveLength(3)
+    expect(found.comments?.path).toContain('.srt')
+  })
 })

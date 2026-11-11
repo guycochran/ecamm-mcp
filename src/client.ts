@@ -192,7 +192,8 @@ export interface ThumbnailRefresh {
 
 export interface PreflightCheck {
   check: string
-  status: 'ok' | 'warn' | 'info'
+  /** ok: read and fine. warn: read and a problem. unknown: could not be read. info: context only. */
+  status: 'ok' | 'warn' | 'unknown' | 'info'
   detail: string
 }
 
@@ -200,64 +201,107 @@ export interface PreflightInput {
   info: Record<string, unknown>
   sceneTitle?: string
   sourceMode?: string
-  destinations: { title: string }[]
-  overlays: { title: string; visible?: unknown }[]
+  /** undefined = the list could not be read, which is not the same as an empty list. */
+  destinations?: { title: string }[]
+  overlays?: { title: string; visible?: unknown }[]
+  /** What the person is about to do. Left out, it is inferred from the main button where that is possible. */
+  intent?: 'go_live' | 'record'
 }
 
+export interface PreflightResult {
+  verdict: 'problems_found' | 'incomplete' | 'no_problems_seen'
+  summary: string
+  intent: 'go_live' | 'record' | 'unknown'
+  checks: PreflightCheck[]
+  notChecked: string[]
+}
+
+const PREFLIGHT_NOT_CHECKED = [
+  'Whether sound is actually reaching Ecamm. Mute and level are settings, not a signal.',
+  'The camera picture.',
+  'The internet connection and stream health.',
+  'Which destination, event and privacy setting are selected in Ecamm.',
+  'Recording settings, separate tracks and disk space.',
+]
+
 /**
- * Pre-show checklist built only from what Ecamm reports. "warn" means a viewer would
- * notice (silent stream, nowhere to stream to, already on air); "info" is context.
+ * Pre-show check built only from what Ecamm reports, and honest about the rest.
+ *
+ * A value Ecamm did not report is "unknown", never assumed fine: an absent mute state is
+ * not unmuted, an unreadable button is not idle, and a list that failed to load is not an
+ * empty list. There is no overall "ready" claim, because settings cannot show that sound,
+ * picture or the connection work.
  */
-export function preflight(input: PreflightInput): { ready: boolean; summary: string; checks: PreflightCheck[] } {
+export function preflight(input: PreflightInput): PreflightResult {
   const { info } = input
-  const { audio, mainMuted } = summarizeInfo(info)
+  const { audio } = summarizeInfo(info)
   const checks: PreflightCheck[] = []
   const add = (check: string, status: PreflightCheck['status'], detail: string) => checks.push({ check, status, detail })
+  const reported = (key: string) => scalar(info[key]).trim() !== ''
 
   const button = scalar(info.ButtonLabel).trim()
   const state = onAirState(button)
   if (state === 'on-air') add('On-air state', 'warn', `Main button reads "${button}", so a broadcast or recording is already running.`)
-  else if (state === 'busy') add('On-air state', 'warn', `Main button reads "${button}". Ecamm is in the middle of starting or ending a broadcast.`)
-  else if (state === 'ended') add('On-air state', 'warn', `Main button reads "${button}". The last broadcast ended and Ecamm is waiting for you to dismiss its summary.`)
-  else if (state === 'unknown') add('On-air state', 'warn', button
+  else if (state === 'busy') add('On-air state', 'warn', `Main button reads "${button}". Ecamm is in the middle of starting or ending.`)
+  else if (state === 'ended') add('On-air state', 'warn', `Main button reads "${button}". The last session ended and Ecamm is waiting for its summary to be dismissed.`)
+  else if (state === 'unknown') add('On-air state', 'unknown', button
     ? `Main button reads "${button}", which this tool does not recognize, so it cannot tell whether Ecamm is on air.`
     : 'Ecamm did not report its main button, so this tool cannot tell whether it is on air.')
   else add('On-air state', 'ok', `Idle. Main button reads "${button}".`)
 
-  add('Scene', input.sceneTitle ? 'ok' : 'warn', input.sceneTitle
-    ? `Starting on "${input.sceneTitle}"${input.sourceMode ? ` (source: ${input.sourceMode})` : ''}.`
-    : 'Could not read the current scene.')
+  const intent: PreflightResult['intent'] = input.intent
+    ?? (state !== 'idle' ? 'unknown' : /^record$/i.test(button) ? 'record' : 'go_live')
 
-  add('Main output', mainMuted ? 'warn' : 'ok', mainMuted ? 'Main output is MUTED. Viewers will hear nothing.' : 'Main output is unmuted.')
+  if (input.sceneTitle) add('Scene', 'ok', `On "${input.sceneTitle}"${input.sourceMode ? ` (source: ${input.sourceMode})` : ''}.`)
+  else add('Scene', 'unknown', 'Could not read the current scene.')
+
+  if (!reported('Mute')) add('Main output', 'unknown', 'Ecamm did not report whether the main output is muted.')
+  else if (yes(info.Mute)) add('Main output', 'warn', 'Main output is muted in Ecamm.')
+  else add('Main output', 'ok', 'Main output is not muted.')
 
   const mic = audio.mic
-  if (!mic) add('Mic', 'info', 'Ecamm did not report a mic bus.')
-  else if (mic.muted) add('Mic', 'warn', 'Mic is MUTED.')
-  else if (Number(mic.volume) === 0) add('Mic', 'warn', 'Mic volume is 0.')
-  else add('Mic', 'ok', `Mic is live at volume ${mic.volume ?? 'unknown'}.`)
+  if (!mic || mic.muted === undefined) add('Mic', 'unknown', 'Ecamm did not report a mute state for the mic.')
+  else if (mic.muted) add('Mic', 'warn', 'Mic is muted in Ecamm.')
+  else if (mic.volume !== undefined && Number(mic.volume) === 0) add('Mic', 'warn', 'Mic level is set to 0.')
+  else add('Mic', 'ok', `Mic is not muted${mic.volume !== undefined ? `, level ${mic.volume}` : ''}. This is a setting; it does not show that sound is arriving.`)
 
   for (const [bus, a] of Object.entries(audio)) {
     if (bus === 'mic') continue
     if (a.muted) add(`Audio: ${bus}`, 'info', `${bus} is muted.`)
-    else if (Number(a.volume) === 0) add(`Audio: ${bus}`, 'info', `${bus} volume is 0.`)
+    else if (a.volume !== undefined && Number(a.volume) === 0) add(`Audio: ${bus}`, 'info', `${bus} level is 0.`)
   }
 
-  add('Destinations', input.destinations.length ? 'ok' : 'warn', input.destinations.length
-    ? `Available: ${input.destinations.map((d) => d.title).join(', ')}.`
-    : 'No streaming destinations are set up in Ecamm.')
+  if (intent === 'record') add('Destinations', 'info', 'Not needed for a recording.')
+  else if (!input.destinations) add('Destinations', 'unknown', 'The destination list could not be read.')
+  else if (!input.destinations.length) add('Destinations', intent === 'go_live' ? 'warn' : 'info', 'No streaming destinations are set up in Ecamm.')
+  else add('Destinations', intent === 'go_live' ? 'ok' : 'info', `Set up: ${input.destinations.map((d) => d.title).join(', ')}. This does not show which one is selected or test the connection.`)
 
-  if (yes(info.PreviewMode)) add('Preview mode', 'warn', 'Preview Mode is ON. Scene changes will not reach viewers until published.')
-  if (yes(info.LiveDemo)) add('Live demo', 'warn', 'Live Demo mode is ON.')
+  if (!reported('PreviewMode')) add('Preview mode', 'unknown', 'Ecamm did not report Preview Mode.')
+  else if (yes(info.PreviewMode)) add('Preview mode', 'warn', 'Preview Mode is on. Scene changes will not reach viewers until published.')
+  if (yes(info.LiveDemo)) add('Live demo', 'warn', 'Live Demo mode is on.')
   if (yes(info.HidingUI)) add('On-screen controls', 'info', 'Ecamm UI controls are hidden.')
 
-  const visible = input.overlays.filter((o) => o.visible === true).map((o) => o.title)
-  add('Overlays', 'info', visible.length ? `Showing now: ${visible.join(', ')}.` : 'No overlays showing in this scene.')
+  if (!input.overlays) add('Overlays', 'unknown', 'The overlay list could not be read.')
+  else {
+    const visible = input.overlays.filter((o) => o.visible === true).map((o) => o.title)
+    add('Overlays', 'info', visible.length ? `Showing now: ${visible.join(', ')}.` : 'No overlays showing in this scene.')
+  }
 
-  const warns = checks.filter((c) => c.status === 'warn')
+  const names = (status: PreflightCheck['status']) => checks.filter((c) => c.status === status).map((c) => c.check)
+  const warns = names('warn')
+  const unknowns = names('unknown')
+  const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`
+  const summary = warns.length
+    ? `${plural(warns.length, 'problem')} in what Ecamm reports: ${warns.join(', ')}.${unknowns.length ? ` Could not read: ${unknowns.join(', ')}.` : ''}`
+    : unknowns.length
+      ? `No problems seen, but ${plural(unknowns.length, 'thing')} could not be read: ${unknowns.join(', ')}.`
+      : 'No problems seen in what Ecamm reports. That covers settings only; see notChecked for what this cannot tell you.'
   return {
-    ready: warns.length === 0,
-    summary: warns.length === 0 ? 'Ready. Nothing to fix.' : `${warns.length} thing${warns.length === 1 ? '' : 's'} to fix: ${warns.map((w) => w.check).join(', ')}.`,
+    verdict: warns.length ? 'problems_found' : unknowns.length ? 'incomplete' : 'no_problems_seen',
+    summary,
+    intent,
     checks,
+    notChecked: PREFLIGHT_NOT_CHECKED,
   }
 }
 
@@ -498,6 +542,21 @@ export class EcammClient {
       await sleep(50)
     }
     return false
+  }
+
+  /**
+   * Replace an existing overlay's text. Returns true when Ecamm then lists the overlay under
+   * the new text, which a real Ecamm 4.6.2 does for plain text overlays. false means
+   * accepted but not confirmed, which is normal for overlays that keep their own name.
+   */
+  async setOverlayText(id: string, value: string): Promise<boolean> {
+    await this.set('setOverlayText', { id, text: value })
+    const deadline = Date.now() + 1500
+    for (;;) {
+      if ((await this.overlays()).find((o) => o.id === id)?.title === value) return true
+      if (Date.now() >= deadline) return false
+      await sleep(150)
+    }
   }
 
   /** Mute is a toggle in Ecamm. Read, toggle only if needed, read back. */
