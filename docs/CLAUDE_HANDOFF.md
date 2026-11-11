@@ -2,9 +2,71 @@
 
 Updated November 10, 2026 (America/Los_Angeles).
 
+## Claude update 2, November 10, 2026 (about 11 PM Pacific)
+
+Branch `claude/broadcast-intent` now also contains `codex/ecamm-recording-workflows` (#10, head `e7b2330`), merged cleanly onto `b62ec15` as `e30f6e1`. Both registrars and the `recording-complete` / `recording-doctor` CLI routing are intact, as are the mutation queue, getInfo pacing, the scene sheet and explicit intent. Not merged to main, not tagged, not released.
+
+Commits in this update: `e30f6e1` (merge of #10), `99fa46e` (preflight, markers, cues, demos, this handoff). Bundle run against `release/ecamm-mcp.cjs` built from `99fa46e`: 58 passed in 3 files.
+
+### New real-Ecamm results (iMac Pro, Intel, Ecamm 4.6.2 per RESEARCH.md; test build of `b62ec15`)
+
+| Check | Result |
+| --- | --- |
+| Marker file from the 10:20 PM Record Only recording | `00:00:00<TAB>Start` then `00:00:10<TAB>MCP marker via setAddMarker`. **`setAddMarker` writes the marker file.** The earlier marker failure was the wrong endpoint name |
+| `record` intent with Ecamm in Record + Stream mode (button `New`) | Refused, not clicked |
+| `go_live` without confirm, same mode | Dry run only: "Go live (click "New")", destination and title echoed |
+| `setVolume` after the endpoint-specific acknowledgement fix | Accepted; before and after `100` |
+| Preview Mode | Reported off after Guy dismissed the end summary and turned it off by hand. Whether the tool can turn it off is still untested |
+
+Not done on a real Ecamm, deliberately: an actual `go_live`. The finish checklist says not to activate a streaming destination to complete a checklist, so the "go live twice, then end" check stays owed until Guy asks for it. The Record Only version of that check (record twice, then end) passed earlier.
+
+### Real media, real ffprobe, not on the Mac
+
+`inspectRecording`, `receiveRecording`, `listRecordings` and `prepareHandoff` were run with the system `ffprobe` 6.1.1 on Linux against three real Ecamm recordings Guy uploaded (two from the unlisted broadcast including the split file, one Record Only). All three read as `mov`, HEVC 1920x1080 video plus stereo AAC, durations 79.4 s, 21.3 s and 163.0 s. A second notification for the same file was a duplicate with the same event id. A handoff with a real second file, an expected guest audio track with no path, and the main file listed again came back `needs_attention` with `metadata_checked`, `needs_file` and `duplicate_file`. This validates the ffprobe arguments and parsing against real Ecamm output. It does not validate ffprobe on the Mac, the Shortcut, or the extension settings.
+
+### File formats observed from a real Ecamm 4.6.2
+
+- Marker file: same base name as the recording, `.txt`, LF line endings, one marker per line, `HH:MM:SS`, then a tab and the text. A marker with no text has no tab. `Start` at `00:00:00` is written by Ecamm.
+- Comment file: same base name, `.srt`, one cue per comment shown on screen, `@name: text`.
+- Recording names: `<Title> on YYYY-MM-DD at HH.MM.SS.mov` for a broadcast, `Ecamm Recording on YYYY-MM-DD at HH.MM.SS.mov` for Record Only. A split started a new file named with its own start time.
+- Not observed: separate-track file names, a marker file across a pause or split, Dual Mode.
+
+Sanitized copies are in `test/fixtures`.
+
+### Code added in this update (all simulator-tested)
+
+- **Honest preflight** (`preflight` in `client.ts`, `ecamm_preflight`): statuses are ok / warn / unknown / info. A value Ecamm did not report is unknown, a failed list read is unknown and not an empty list, an unreadable button is unknown. No `ready` field and no "Ready. Nothing to fix"; the result is a verdict of `problems_found`, `incomplete` or `no_problems_seen`, plus a fixed `notChecked` list (sound, picture, connection, selected destination, recording settings). Optional `intent`; a recording does not need a destination.
+- **Marker parsing** (`parseMarkerFile`, `readMarkers`, `sidecarsOf` in `recordings.ts`; `ecamm_read_markers`): only the observed layout; anything else is `unrecognized`. The handoff receipt attaches marker and comment files only on an exact name match beside the main recording. No ISO association.
+- **Bounded cues** (`cue.ts`; `ecamm_plan_cue` read tier, `ecamm_run_cue` show tier): up to 12 steps of scene, overlay show/hide, overlay text, mute, volume, wait (30 s each, 60 s total). Planned and validated first; scene-local overlays after a scene step are resolved at run time and marked `later` in the plan. Runs inside the existing `exclusive` section taken by `wrap`, with no lock of its own. Stops on the first failure and on a scene change it did not make. Per-step outcome: verified, accepted, failed, not_run. The step schema has no go-live, end, comment, profile or Zoom step.
+- `EcammClient.setOverlayText` now holds the readback, shared by the tool and cues.
+
+### Deliberately not implemented
+
+- **Guest solo / left / right.** No guest was available, so nothing was tested and no tool was added.
+- Invitations, admission, profile creation, editor transfer: unsupported, no endpoints guessed.
+- ISO / separate-track association: no file names observed.
+
+### Validation (simulator)
+
+- `npm run build`: passed. `npm test`: **187 passed** in 7 files.
+- `npm run package`: passed. Bundle run: `ECAMM_MCP_ENTRY="$PWD/release/ecamm-mcp.cjs" npx vitest run test/e2e.test.ts test/recording-e2e.test.ts test/workflow-e2e.test.ts`, **58 passed** in 3 files.
+
+### Still owed, in order
+
+1. On the Mac: recording folder and an absolute `ffprobe` path in the extension settings; `ecamm_recording_status` in the MCP and `recording-doctor` in the Shortcut's environment, compared. Claude has no shell on the Mac in this session, so this needs Guy or a session with folder access.
+2. Broadcast Finishes Shortcut, added alongside any existing automation. Then: finish a recording with Claude closed and confirm the notice persisted; duplicate delivery; a title with spaces and non-ASCII.
+3. Record Only session for what is left of checklist A and B: split into a new file, which completion events each part produces, marker times after a pause and after a split, sidecar names for each part.
+4. Separate-track recording, to see ISO file names before any association is written.
+5. The new code above on a real Ecamm: preflight, a cue, `ecamm_read_markers` on the Mac.
+6. With a consenting guest: `setSolo`, `setAddLeft`, `setAddRight`.
+7. Only if Guy asks: `go_live` twice on an Unlisted broadcast, then `end`.
+8. Preview Mode off through the tool; system audio; Zoom sharing.
+
+Demo scripts: [DEMOS.md](DEMOS.md).
+
 ## Claude update, November 10, 2026 (evening)
 
-Branch `claude/broadcast-intent` = `main` + `codex/ecamm-api-alignment` (#8) + `scene-sheet` (#7), reconciled, plus sections A and B below. Draft PR opened against `main`. Everything in this update is **simulator-only**. No real Ecamm control was operated for it.
+Branch `claude/broadcast-intent` = `main` + `codex/ecamm-api-alignment` (#8) + `scene-sheet` (#7), reconciled, plus sections A and B below. Draft PR opened against `main`. The code sections below are simulator-tested. A real-Ecamm session followed and is recorded separately under "Real-Ecamm session".
 
 ### Review of #8
 
@@ -39,18 +101,41 @@ Branch `claude/broadcast-intent` = `main` + `codex/ecamm-api-alignment` (#8) + `
 
 ### Validation on this branch
 
-- `npm run build`: passed. `npm test`: **136 passed**. `npm run package`: passed. `ECAMM_MCP_ENTRY=release/ecamm-mcp.cjs npx vitest run test/e2e.test.ts`: **44 passed**, now really against the bundle.
+- `npm run build`: passed. `npm test`: **138 passed**. `npm run package`: passed. `ECAMM_MCP_ENTRY=release/ecamm-mcp.cjs npx vitest run test/e2e.test.ts`: **45 passed**, now really against the bundle.
 - Version left at 0.2.3. No tag, no release.
 
-### Real-Ecamm checks still owed (Guy, with a test build)
+### Real-Ecamm session, November 10, 2026, about 10:20 PM Pacific
 
-1. What does a set command's raw body look like? One command settles the acknowledgement question.
-2. Marker in a Record Only recording: does `setAddMarker` write the marker file?
-3. `pause` then `resume` in Record Only: button labels before and after.
-4. Overlay text on a disposable overlay, including a non-ASCII name.
-5. `go_live` twice on an unlisted broadcast: second one must not end it. Then `end`.
-6. `record` while in broadcast mode, and `go_live` in Record Only: both must refuse.
-7. Scene sheet, then refresh: pictures current, return verified.
+Run by Claude through the installed test build of this branch (commit `0bf8df6`), on the iMac Pro (Intel), Ecamm in Record Only mode, idle at the start. App version per RESEARCH.md: 4.6.2. These are observations from a real Ecamm and are kept apart from the simulator results above.
+
+| Check | Result on real Ecamm |
+| --- | --- |
+| Acknowledgements | `setMute`, `setScene`, `setOverlay`, `setOverlayText`, `setClickButton`, `setAddMarker`, `setClickPause`, `setMode`, `setPreviewMode` were accepted. Whether they arrive bare or as JSON was not captured, since both are accepted |
+| `setVolume` acknowledgement | **Not `Done`.** Body was `["100"]`, the resulting level. The strict check rejected it as an unknown outcome. Fixed after the session with an endpoint-specific rule; that fix is simulator-tested only |
+| Overlay text | Worked, including `Renée ✓ MCP test`. Rendered in the scene thumbnail. The overlay list then showed the new text as the overlay's title, so the list is a readback for text overlays. Restored to `Live` |
+| No intent, `confirm: true` | Not clicked. Reported button `Record`, state idle |
+| `go_live` in Record Only | Refused, not clicked |
+| `record` | Clicked `Record`; outcome verified; button `Finish` |
+| `record` again while recording | Not clicked |
+| Marker (`setAddMarker`) | Accepted during the recording. **Marker file not yet inspected** |
+| `pause` | Clicked `Pause`; button became `Resume`; verified |
+| `pause` again | Not clicked |
+| `resume` | Clicked `Resume`; button became `Pause`; verified |
+| Refresh scene sheet while recording | Refused; no scene switches; stored sheet returned |
+| `end` | Clicked `Finish`; outcome verified; button `OK` (state `ended`) |
+| `end` again | Not clicked |
+| Refresh scene sheet in `ended` state | All four other scenes `refreshed`; return to starting scene verified |
+| Preview Mode | Toggled on. Three further toggles, sent while the end-of-recording summary (`OK`) was showing, did not turn it off. **Left on.** Cause unknown; not caused by this branch's changes, the tool code is unchanged |
+
+Not run on a real Ecamm: `go_live` twice and `end` in broadcast mode, `record` refused in broadcast mode, system audio, Zoom sharing, a mid-capture intervention, a failed or stuck start.
+
+### Real-Ecamm checks still owed
+
+1. Guy: open the marker `.txt` from the 10:21 PM recording and look for `MCP marker via setAddMarker`.
+2. Guy: dismiss the `OK` summary, then see whether Preview Mode turns off from Ecamm and from the tool.
+3. Broadcast mode, privacy Unlisted: `record` must refuse; `go_live` twice must not end it; then `end`.
+4. Re-run `ecamm_set_volume` on the next build to confirm the `setVolume` fix.
+5. System audio mute and volume; Zoom sharing panel in a test meeting.
 
 ### Next
 

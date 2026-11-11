@@ -47,11 +47,23 @@ const ACKS = new Set(['done', 'clicked it!'])
  * around it. Until a real device settles which, accept the same two words in any of the
  * shapes they could arrive in: bare, a JSON string, or a one-element JSON array.
  */
-export function isAcknowledgement(body: string): boolean {
+export function isAcknowledgement(body: string, endpoint?: string): boolean {
   let value: unknown = body
   try { value = JSON.parse(body) } catch { /* bare text */ }
   if (Array.isArray(value) && value.length === 1) value = value[0]
-  return typeof value === 'string' && ACKS.has(value.trim().toLowerCase())
+  if (typeof value !== 'string') return false
+  const word = value.trim()
+  return ACKS.has(word.toLowerCase()) || (endpoint !== undefined && ENDPOINT_ACKS[endpoint]?.(word) === true)
+}
+
+/**
+ * Replies seen on a real Ecamm that are not one of the two documented words. Add an entry
+ * only for a reply actually observed for that endpoint; anything else stays "unknown".
+ *
+ * setVolume: answers with the resulting level, e.g. ["100"] (Ecamm 4.6.2, 2026-11-10).
+ */
+const ENDPOINT_ACKS: Record<string, (reply: string) => boolean> = {
+  setVolume: (reply) => /^\d{1,3}(\.\d+)?$/.test(reply),
 }
 
 export class EcammHttp {
@@ -109,7 +121,7 @@ export class EcammHttp {
     if (/access denied/i.test(body)) {
       throw new EcammError(`${endpoint}: Ecamm denied the command. Check Remote Control permissions.`, 'permission')
     }
-    if (!isAcknowledgement(body)) {
+    if (!isAcknowledgement(body, endpoint)) {
       throw new EcammError(
         `${endpoint}: unrecognized command response (${JSON.stringify(body.slice(0, 80))}); the outcome is unknown. Check Ecamm before retrying.`,
         'parse',

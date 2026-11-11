@@ -35,6 +35,6 @@ describe('session preparation', () => {
       expect(config.annotations.readOnlyHint).toBe(true); tools.push(name)
     } } as unknown as McpServer
     registerWorkflowTools(server, {} as EcammClient)
-    expect(tools).toHaveLength(5)
+    expect(tools).toHaveLength(6)
   })
 })

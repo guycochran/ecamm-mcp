@@ -53,13 +53,13 @@ describe('ecamm-mcp end to end', () => {
     expect(h['user-agent']).toBe(`Claude (ecamm-mcp)/${VERSION}`)
   })
 
-  it('preflight passes a healthy setup and flags a muted mic', async () => {
+  it('preflight sees no problems on a healthy setup and flags a muted mic', async () => {
     let r = await call('ecamm_preflight')
-    expect(r.json.ready).toBe(true)
+    expect(r.json.verdict).toBe('no_problems_seen')
     expect(r.json.checks.find((c: { check: string }) => c.check === 'Destinations').detail).toContain('OHG YouTube')
     state.mute.mic = true
     r = await call('ecamm_preflight')
-    expect(r.json.ready).toBe(false)
+    expect(r.json.verdict).toBe('problems_found')
     expect(r.json.summary).toContain('Mic')
     state.mute.mic = false
   })
@@ -108,7 +108,15 @@ describe('ecamm-mcp end to end', () => {
     expect(state.overlays['S-ME']['O-LT']).toMatchObject({ text: value, visible: before })
     const missing = await call('ecamm_set_overlay_text', { overlay: 'missing overlay', text: value })
     expect(missing.isError).toBe(true)
-  })
+  }, 15000)
+
+  it('verifies overlay text when Ecamm lists the overlay under its new text', async () => {
+    await call('ecamm_switch_scene', { scene: 'Me w/comment' })
+    const r = await call('ecamm_set_overlay_text', { overlay: 'Live', text: 'Renée ✓' })
+    expect(r.json).toMatchObject({ accepted: true, verified: true, text: 'Renée ✓' })
+    await call('ecamm_set_overlay_text', { overlay: 'Renée ✓', text: 'Live' })
+    await call('ecamm_switch_scene', { scene: 'Me (full)' })
+  }, 15000)
 
   describe('going live, recording and ending by intent', () => {
     const clicks = () => state.log.filter((l) => l.path === 'setClickButton').length
@@ -292,6 +300,120 @@ describe('ecamm-mcp end to end', () => {
       expect(state.volume.mic).toBe(90)
       await call('ecamm_set_volume', { bus: 'mic', volume: 100 })
     })
+  })
+
+  describe('cues', () => {
+    const sets = () => state.log.filter((l) => l.path.startsWith('set')).length
+    const home = async () => {
+      state.onSetScene = undefined
+      state.live = false; state.busyUntil = 0; state.buttonLabel = undefined
+      await call('ecamm_switch_scene', { scene: 'Me (full)' })
+      await call('ecamm_set_volume', { bus: 'mic', volume: 100 })
+      state.mute.mic = false
+      state.overlays['S-COMMENT']['O-TXT'] = { title: 'Live', visible: true, isText: true }
+    }
+    const interview = [
+      { do: 'scene', scene: 'Me w/comment' },
+      { do: 'overlay_text', overlay: 'Live', text: 'Renée' },
+      { do: 'overlay', overlay: 'Renée', state: 'hide' },
+      { do: 'volume', bus: 'mic', volume: 15 },
+      { do: 'mute', bus: 'mic', muted: true },
+    ]
+
+    it('plans without changing anything, and marks what can only be checked later', async () => {
+      await home()
+      const before = sets()
+      const r = await call('ecamm_plan_cue', { steps: interview })
+      expect(sets()).toBe(before)
+      expect(r.json).toMatchObject({ ok: true, changedEcamm: false, startingScene: 'Me (full)' })
+      expect(r.json.steps.map((s: { checked: string }) => s.checked)).toEqual(['yes', 'later', 'later', 'not-needed', 'not-needed'])
+    })
+
+    it('runs the steps in order and reports each as read back from Ecamm', async () => {
+      await home()
+      const from = state.log.length
+      const r = await call('ecamm_run_cue', { steps: interview })
+      expect(r.json).toMatchObject({ ran: true, completed: '5 of 5', sceneNow: 'Me w/comment' })
+      expect(r.json.stoppedEarly).toBeUndefined()
+      expect(r.json.steps.map((s: { outcome: string }) => s.outcome)).toEqual(['verified', 'verified', 'verified', 'verified', 'verified'])
+      expect(state.log.slice(from).filter((l) => l.path.startsWith('set')).map((l) => l.path)).toEqual(['setScene', 'setOverlayText', 'setOverlay', 'setVolume', 'setMute'])
+      expect(state.overlays['S-COMMENT']['O-TXT']).toMatchObject({ title: 'Renée', visible: false })
+      expect(state.volume.mic).toBe(15)
+      expect(state.mute.mic).toBe(true)
+      await home()
+    }, 20000)
+
+    it('runs nothing at all when a step names a scene that does not exist', async () => {
+      await home()
+      const before = sets()
+      const r = await call('ecamm_run_cue', { steps: [{ do: 'mute', bus: 'mic', muted: true }, { do: 'scene', scene: 'No Such Scene' }] })
+      expect(sets()).toBe(before)
+      expect(r.json).toMatchObject({ ran: false, changedEcamm: false })
+      expect(r.json.problems[0]).toContain('Step 2')
+      expect(state.mute.mic).toBe(false)
+    })
+
+    it('stops at the first failure, keeps what was done, and does not run the rest', async () => {
+      await home()
+      const r = await call('ecamm_run_cue', {
+        steps: [{ do: 'scene', scene: 'Me w/comment' }, { do: 'overlay', overlay: 'Lower Third Guy', state: 'show' }, { do: 'mute', bus: 'mic', muted: true }],
+      })
+      expect(r.json.steps.map((s: { outcome: string }) => s.outcome)).toEqual(['verified', 'failed', 'not_run'])
+      expect(r.json.completed).toBe('1 of 3')
+      expect(r.json.stoppedEarly).toContain('Step 2')
+      expect(state.scene).toBe('S-COMMENT') // not rolled back
+      expect(state.mute.mic).toBe(false)
+      await home()
+    }, 20000)
+
+    it('stops and leaves it alone when someone else changes the scene mid-cue', async () => {
+      await home()
+      state.onSetScene = () => { state.onSetScene = undefined; setTimeout(() => { state.scene = 'S-HALF' }, 300) }
+      const r = await call('ecamm_run_cue', {
+        steps: [{ do: 'scene', scene: 'Me w/comment' }, { do: 'wait', seconds: 1 }, { do: 'mute', bus: 'mic', muted: true }],
+      })
+      expect(r.json.steps.map((s: { outcome: string }) => s.outcome)).toEqual(['verified', 'verified', 'not_run'])
+      expect(r.json.stoppedEarly).toContain('Someone else changed it')
+      expect(state.scene).toBe('S-HALF')
+      expect(state.mute.mic).toBe(false)
+      await home()
+    }, 20000)
+
+    it('cannot be asked to go live, record, end or post', async () => {
+      await home()
+      for (const step of [{ do: 'go_live' }, { do: 'end' }, { do: 'comment', text: 'hi' }, { do: 'profile', profile: 'x' }]) {
+        const clicksBefore = state.log.filter((l) => l.path === 'setClickButton' || l.path === 'setComment').length
+        let rejected = false
+        try { rejected = Boolean((await call('ecamm_run_cue', { steps: [step] })).isError) } catch { rejected = true }
+        expect(rejected).toBe(true)
+        expect(state.log.filter((l) => l.path === 'setClickButton' || l.path === 'setComment').length).toBe(clicksBefore)
+      }
+    })
+
+    it('enforces the step and wait limits', async () => {
+      const tooMany = Array.from({ length: 13 }, () => ({ do: 'wait', seconds: 0.1 }))
+      let rejected = false
+      try { rejected = Boolean((await call('ecamm_run_cue', { steps: tooMany })).isError) } catch { rejected = true }
+      expect(rejected).toBe(true)
+      const before = sets()
+      const r = await call('ecamm_run_cue', { steps: [{ do: 'wait', seconds: 30 }, { do: 'wait', seconds: 30 }, { do: 'wait', seconds: 5 }, { do: 'mute', bus: 'mic', muted: true }] })
+      expect(r.json.ran).toBe(false)
+      expect(r.json.problems[0]).toContain('60 s')
+      expect(sets()).toBe(before)
+    })
+
+    it('holds the queue for the whole cue, so another change cannot land in the middle', async () => {
+      await home()
+      const from = state.log.length
+      const cue = call('ecamm_run_cue', { steps: [{ do: 'volume', bus: 'mic', volume: 40 }, { do: 'wait', seconds: 1 }, { do: 'volume', bus: 'mic', volume: 60 }] })
+      await new Promise((r) => setTimeout(r, 200))
+      const other = call('ecamm_set_volume', { bus: 'soundeffects', volume: 33 })
+      await Promise.all([cue, other])
+      const order = state.log.slice(from).filter((l) => l.path === 'setVolume').map((l) => `${l.query.bus}=${l.query.volume}`)
+      expect(order).toEqual(['mic=40', 'mic=60', 'soundeffects=33'])
+      await call('ecamm_set_volume', { bus: 'soundeffects', volume: 59 })
+      await home()
+    }, 20000)
   })
 
   it('pause and resume say where to end up, so repeating one does nothing', async () => {
