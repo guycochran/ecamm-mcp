@@ -44,6 +44,22 @@ It takes one absolute recording path through standard input, as plain text. It n
 
 The helper must receive the same recording-folder configuration as the MCP server. Desktop extension settings do not automatically become environment variables in Shortcuts.
 
+### Generate the shell action
+
+With the recording environment configured, run `ecamm-mcp recording-shortcut` (or `node /absolute/path/to/server recording-shortcut`). It prints a complete shell action with the current recording folders, inbox, Node executable, and MCP entry point fixed to absolute paths. Copy that output into Shortcuts' **Run Shell Script**, choosing **Pass Input: to stdin**. The incoming recording path must not be inserted into the script text.
+
+This command only prints text: it does not install a Shortcut, change Ecamm settings, open media, or create a completion event. It checks that recording folders and the local entry point exist. Completion capture does **not** require ffprobe; later media inspection does. Regenerate the action after moving the MCP installation or changing the recording folders or inbox. Keep the server files at that location for the helper to work when chats are closed.
+
+For example, to generate from the development bundle:
+
+```sh
+ECAMM_RECORDING_FOLDER='/absolute/path/to/recordings' \
+ECAMM_FFPROBE='/absolute/path/to/ffprobe' \
+node /absolute/path/to/ecamm-mcp.cjs recording-shortcut
+```
+
+The folder must already exist. Use the same values saved in your desktop extension. The generated action explicitly sets its allowed folders, so unrelated environment settings cannot silently redirect them.
+
 Suggested manual Shortcut setup (requires real-Ecamm acceptance testing):
 
 1. Create a Shortcut that accepts the file path supplied by Ecamm's **Broadcast Finishes** event.

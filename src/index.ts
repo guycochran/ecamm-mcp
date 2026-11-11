@@ -48,7 +48,7 @@ async function serve() {
 // No arguments = MCP server on stdio (how Claude runs it). Arguments = setup / doctor / help.
 const args = process.argv.slice(2)
 const run = args.length
-  ? (['recording-complete', 'recording-doctor'].includes(args[0]) ? runRecordingCli(args) : runCli(args)).then((code) => process.exit(code))
+  ? (['recording-complete', 'recording-doctor', 'recording-shortcut'].includes(args[0]) ? runRecordingCli(args) : runCli(args)).then((code) => process.exit(code))
   : serve()
 run.catch((err) => {
   console.error(err instanceof Error ? err.message : err)

@@ -1,9 +1,14 @@
 import { z } from 'zod'
 import { receiveRecording, recordingDoctor, recordingOptions } from './recordings.js'
+import { recordingShortcut } from './recording-shortcut.js'
 
 /** Completion paths travel as JSON on stdin, never as executable shell text. */
 export async function runRecordingCli(args: string[]): Promise<number> {
   try {
+    if (args.length === 1 && args[0] === 'recording-shortcut') {
+      process.stdout.write(await recordingShortcut(recordingOptions(), process.execPath, process.argv[1]))
+      return 0
+    }
     if (args.length === 1 && args[0] === 'recording-doctor') {
       console.log(JSON.stringify(await recordingDoctor(recordingOptions()), null, 2))
       return 0

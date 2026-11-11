@@ -22,7 +22,7 @@ jobs:
       - name: Verify the actual desktop extension archive
         run: node scripts/verify-extension.mjs
       - name: Run the end-to-end suite against the shipped single-file bundle
-        run: ECAMM_MCP_ENTRY="$PWD/release/ecamm-mcp.cjs" npx vitest run test/e2e.test.ts test/recording-e2e.test.ts test/workflow-e2e.test.ts
+        run: ECAMM_MCP_ENTRY="$PWD/release/ecamm-mcp.cjs" npx vitest run test/e2e.test.ts test/recording-e2e.test.ts test/workflow-e2e.test.ts test/recording-shortcut.test.ts
 
   real-media:
     runs-on: ubuntu-latest

@@ -2,6 +2,18 @@
 
 Updated November 10, 2026 (America/Los_Angeles).
 
+## Codex overnight setup pass, November 10, 2026
+
+Integrated Claude through `23dbe71`, including the split-marker evidence. Added `recording-shortcut`, a CLI that prints a configured POSIX shell action for Shortcuts. It validates folder/entry paths, fixes Node and server locations, quotes configuration safely, and passes the incoming recording path only through stdin. It does not install/enable a Shortcut or change Ecamm. Completion capture works without ffprobe; inspection still requires it.
+
+Validation: **208 tests passed in 10 files**, including generated media; the 3 new Shortcut tests also passed against the packaged bundle. The extracted desktop archive verifier now generates and runs the shell action, confirms deduplication, and lists its event over MCP. No live Ecamm controls were exercised.
+
+Mac configuration verified by Codex: Claude extension settings were saved through its UI and read back from the settings file. `userConfig.recording_folder` is `/Users/macbookpro/Projects/ecamm-mcp/recordings`; `userConfig.ffprobe` is `/usr/local/bin/ffprobe`. That folder exists and the configured CLI reports `metadataInspectionConfigured: true`. This proves saved configuration, not that an older already-running extension process has reloaded it. Claude can check read-only recording status after reload.
+
+The project now ignores `/recordings/` and `/.local/`. A generated helper is at `/Users/macbookpro/Projects/ecamm-mcp/.local/recording-complete.sh`, pointing to the project's packaged server. It passes shell syntax validation. No real completion event has been captured.
+
+Shortcuts currently reports **scripting actions are disabled**. An unassigned draft named **Ecamm Recording Complete - Setup Pending** exists with an unconfigured Run Shell Script action. Do not describe it as installed/working. The generated script is ready, but enabling scripting requires Guy's approval while awake. After approval: finish the action (stdin input), preserve any existing Broadcast Finishes automation, assign it in Ecamm, and test a local recording with Guy watching. Ecamm's own recording destination has not been changed. No live starts, recording starts, releases, or main merges overnight.
+
 ## Claude update 4, November 10, 2026 (11:25 PM Pacific)
 
 - Merged `codex/ecamm-recording-workflows` at `38c2149` into `claude/broadcast-intent` as `6ae794e` (one conflict, this file; both sections kept). Simulator: 198 passed, 7 skipped in 9 files; 58 passed in 3 files against the packaged server. Test build 4 sent to Guy, not yet installed.
