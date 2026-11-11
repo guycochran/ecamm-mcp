@@ -2,6 +2,12 @@
 
 Updated November 10, 2026 (America/Los_Angeles).
 
+## Codex cancellation review
+
+The shared tool wrapper now passes the MCP request's AbortSignal into cue execution and checks cancellation again when a queued mutation reaches execution. A cancelled queued request sends nothing. Cues stop before later steps, recheck after overlay resolution, and interrupt waits when the caller sends MCP cancellation. In-flight actions can still finish; there is no rollback or standalone cancel tool, and a UI Stop button is effective only if that client actually sends protocol cancellation.
+
+Validation: 4 cancellation unit tests plus the existing 10 cue safety tests passed. A real MCP transport test cancels a 30-second wait, confirms the later volume change never runs, and immediately runs the next queued command. That integration test passed against both the source build and the packaged server. No actual Ecamm controls were used.
+
 ## Codex recording-browser follow-up
 
 Added `ecamm_browse_recordings` so a person can find explicit file paths before the completion Shortcut works. Read-only, restricted to configured canonical roots, one directory at a time, alphabetically paged, maximum 5,000 scanned entries. Hidden entries/symlinks are skipped; offline roots are reported; outside paths are refused. Names are only media/sidecar candidates, not proof of Ecamm origin or completion. It does not create events or associate sessions/tracks. The completion-event listing retains its existing behavior.

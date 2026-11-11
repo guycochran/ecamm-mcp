@@ -588,3 +588,22 @@ describe('ecamm-mcp end to end', () => {
     expect(state.log.some((l) => l.path === 'setZoomLeave')).toBe(false)
   })
 })
+
+it('honors MCP cancellation during a cue wait and releases the mutation queue', async () => {
+  const before = state.log.length
+  const controller = new AbortController()
+  const cancelled = client.callTool({ name: 'ecamm_run_cue', arguments: { steps: [
+    { do: 'wait', seconds: 30 }, { do: 'volume', bus: 'mic', volume: 77 },
+  ] } }, undefined, { signal: controller.signal }).then(() => false, () => true)
+  try {
+    // Plan, run start, and first-step reads establish that the cue reached its wait.
+    const deadline = Date.now() + 3000
+    while (state.log.slice(before).filter(r => r.path === 'getCurrentScene').length < 3 && Date.now() < deadline) await new Promise(r => setTimeout(r, 10))
+    expect(state.log.slice(before).filter(r => r.path === 'getCurrentScene').length).toBeGreaterThanOrEqual(3)
+    controller.abort()
+    expect(await cancelled).toBe(true)
+    const next = await call('ecamm_set_volume', { bus: 'mic', volume: 100 })
+    expect(next.isError).not.toBe(true)
+    expect(state.log.slice(before).filter(r => r.path === 'setVolume')).toHaveLength(1)
+  } finally { controller.abort() }
+})

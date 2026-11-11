@@ -121,6 +121,7 @@ That's a cue: up to 12 ordinary steps, run in order. Switch scene, show or hide 
 - **One step at a time, nothing else in between,** and each step reports whether Ecamm confirmed it.
 - **It stops at the first step that fails,** and tells you what ran and what didn't. Nothing is undone.
 - **If you change the scene yourself partway through, it stops** and leaves your choice alone.
+- **If your MCP client sends cancellation, waits stop and later cue steps don't start.** A change already sent to Ecamm may still finish. Check Ecamm before retrying; cancellation does not undo anything. A chat's Stop button only has this effect if that client sends MCP cancellation.
 - **It can't go live, record, end, post a comment, switch profiles or touch Zoom.** Those stay separate requests.
 - **Timing is approximate.** A cue takes a few seconds per step. Use a button for a cut that has to land on a beat.
 

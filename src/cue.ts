@@ -101,17 +101,24 @@ export interface StepOutcome {
   detail?: string
 }
 
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
+const sleep = (ms: number, signal?: AbortSignal) => new Promise<void>((resolve, reject) => {
+  if (signal?.aborted) { reject(new Error('Cue cancelled.')); return }
+  const cancel = () => { clearTimeout(timer); reject(new Error('Cue cancelled.')) }
+  const timer = setTimeout(() => { signal?.removeEventListener('abort', cancel); resolve() }, ms)
+  signal?.addEventListener('abort', cancel, { once: true })
+})
 
 /**
  * Run a planned cue. Call from inside the mutation queue; this takes no lock of its own.
  * Stops at the first failure, and stops without touching anything further if the scene on
  * screen is not the one this cue last put there.
  */
-export async function runCue(client: EcammClient, steps: CueStep[]): Promise<{ steps: StepOutcome[]; completed: number; stopped?: string; sceneNow: string }> {
+export async function runCue(client: EcammClient, steps: CueStep[], signal?: AbortSignal): Promise<{ steps: StepOutcome[]; completed: number; stopped?: string; sceneNow: string }> {
+  const out: StepOutcome[] = steps.map((s, i) => ({ number: i + 1, what: describeStep(s), outcome: 'not_run' as const }))
+  const cancellation = 'The caller cancelled this cue. No further steps were started; an action already sent may still finish. Check Ecamm before retrying.'
+  if (signal?.aborted) return { steps: out, completed: 0, stopped: cancellation, sceneNow: 'unknown' }
   const scenes = await client.scenes()
   let expected = await client.currentScene()
-  const out: StepOutcome[] = steps.map((s, i) => ({ number: i + 1, what: describeStep(s), outcome: 'not_run' as const }))
   let stopped: string | undefined
   if (!expected || !scenes.some(s => s.id === expected)) {
     return { steps: out, completed: 0, stopped: 'The starting scene is unknown; nothing was run.', sceneNow: 'unknown' }
@@ -131,14 +138,16 @@ export async function runCue(client: EcammClient, steps: CueStep[]): Promise<{ s
 
   for (const [i, step] of steps.entries()) {
     const o = out[i]
+    if (signal?.aborted) { stopped = cancellation; break }
     const now = await client.currentScene().catch(() => undefined)
+    if (signal?.aborted) { stopped = cancellation; break }
     if (now !== expected) {
       stopped = `Before step ${o.number}, the scene on screen was not the one this cue left it on. Someone else changed it, so the cue stopped and left their choice alone.`
       break
     }
     try {
       if (step.do === 'wait') {
-        await sleep(step.seconds * 1000)
+        await sleep(step.seconds * 1000, signal)
         o.outcome = 'verified'
       } else if (step.do === 'scene') {
         const target = resolveItem(scenes, step.scene, 'scene')
@@ -146,12 +155,14 @@ export async function runCue(client: EcammClient, steps: CueStep[]): Promise<{ s
         else { o.outcome = 'failed'; o.detail = 'Ecamm did not switch to that scene.' }
       } else if (step.do === 'overlay') {
         const ov = await overlayFor(step.overlay)
+        if (signal?.aborted) { stopped = cancellation; break }
         const want = step.state === 'show'
         const r = await client.setOverlayVisible(ov.id, want)
         if (r.after === want) o.outcome = 'verified'
         else { o.outcome = 'failed'; o.detail = r.after === undefined ? `Visibility of "${ov.title}" could not be read back. Check Ecamm before retrying.` : `Ecamm still lists "${ov.title}" as ${r.after ? 'showing' : 'hidden'}.` }
       } else if (step.do === 'overlay_text') {
         const ov = await overlayFor(step.overlay)
+        if (signal?.aborted) { stopped = cancellation; break }
         const verified = await client.setOverlayText(ov.id, step.text)
         o.outcome = verified ? 'verified' : 'accepted'
         if (!verified) o.detail = 'Ecamm accepted the text but does not list the overlay under it. Normal for overlays that keep their own name; check the picture.'
@@ -169,6 +180,7 @@ export async function runCue(client: EcammClient, steps: CueStep[]): Promise<{ s
         else { o.outcome = 'failed'; o.detail = `Ecamm reports ${step.bus} at ${Number.isFinite(after) ? after : 'an unreadable level'}.` }
       }
     } catch (err) {
+      if (signal?.aborted && step.do === 'wait') { stopped = cancellation; break }
       o.outcome = 'failed'
       o.detail = err instanceof Error ? err.message : String(err)
     }

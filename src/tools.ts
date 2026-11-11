@@ -24,14 +24,18 @@ type Tier = 'read' | 'show' | 'on-air'
 
 export function registerTools(server: McpServer, client: EcammClient, opts: { readOnly: boolean }) {
   const wrap =
-    <A>(tier: Tier, fn: (args: A) => Promise<Result>) =>
-    async (args: A): Promise<Result> => {
+    <A>(tier: Tier, fn: (args: A, signal?: AbortSignal) => Promise<Result>) =>
+    async (args: A, extra?: { signal?: AbortSignal }): Promise<Result> => {
       try {
         if (tier !== 'read' && opts.readOnly) {
           throw new EcammError('ecamm-mcp is in read-only mode (ECAMM_READ_ONLY=1).', 'blocked')
         }
         // Anything that changes Ecamm runs one at a time, start to finish.
-        return tier === 'read' ? await fn(args) : await client.exclusive(() => fn(args))
+        const execute = () => {
+          if (extra?.signal?.aborted) throw new EcammError('This request was cancelled before execution; nothing was sent for it.', 'blocked')
+          return fn(args, extra?.signal)
+        }
+        return tier === 'read' ? await execute() : await client.exclusive(execute)
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err)
         return { content: [{ type: 'text', text: `Error: ${msg}` }], isError: true }
@@ -510,7 +514,7 @@ export function registerTools(server: McpServer, client: EcammClient, opts: { re
     {
       description:
         'Check a cue without running it. A cue is up to 12 ordinary preparation steps in order: switch scene, show or hide an overlay, change an overlay\'s text, mute or unmute, set a level, wait. ' +
-        'Returns the ordered plan and any step that refers to something that does not exist. Overlays named after a scene change can only be checked once that scene is on screen, and are marked "later". ' +
+        'Returns the ordered plan and any step that refers to something that does not exist. Overlay references after a scene or text change are checked when reached and marked "later". ' +
         'Changes nothing. Use it to show the person the plan before ecamm_run_cue. Cues cannot go live, record, end, post comments, switch profiles or control Zoom.',
       inputSchema: cueInput,
       annotations: ann('read', 'Check a cue'),
@@ -529,15 +533,16 @@ export function registerTools(server: McpServer, client: EcammClient, opts: { re
         'Example: "use Guest Split, change the guest lower third to Renée, show it, set music to 15". ' +
         'References available in the current scene are checked first. Overlay references after a scene or text change are checked when reached; earlier steps may already have run if one is missing. It runs steps one at a time, with no other change from this server in between, ' +
         'stops at the first step that fails, and stops without doing more if someone else changes the scene. Each step reports verified, accepted, failed or not_run. Nothing is rolled back. ' +
+        'If the MCP client sends cancellation, waits are interrupted and later steps stop. An action already sent to Ecamm may still finish; check the actual state before retrying. ' +
         'It runs whether or not Ecamm is live, exactly as the individual tools do, so while live the audience sees each step. It cannot go live, record, end, post comments, switch profiles or control Zoom; ask for those separately. ' +
         'Timing is approximate. Use a button for a cut that has to land on a beat.',
       inputSchema: cueInput,
       annotations: ann('show', 'Run a cue'),
     },
-    wrap('show', async ({ steps }: { steps: CueStep[] }) => {
+    wrap('show', async ({ steps }: { steps: CueStep[] }, signal) => {
       const plan = await planCue(client, steps)
       if (!plan.ok) return text({ ran: false, changedEcamm: false, problems: plan.problems, steps: plan.steps, note: 'Nothing was run, because the cue refers to something that could not be found.' })
-      const result = await runCue(client, steps)
+      const result = await runCue(client, steps, signal)
       return text({
         ran: true,
         startedOn: plan.startingScene,
