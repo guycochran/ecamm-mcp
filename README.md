@@ -84,7 +84,7 @@ You don't have to be at the Mac. If you use Claude on your phone and the Claude 
 - "What's muted? What are my levels?"
 - "Switch to the intro scene and send me what it looks like."
 
-Claude answers with the status and sends the scene pictures into the chat. This was tested from an iPhone against a Mac in another room: status, the pre-show check, and a labeled sheet of every scene.
+Claude answers with the status and sends the scene pictures into the chat. This was tested from the Claude phone app against a Mac running Ecamm: status, and a labeled sheet of every scene.
 
 What you need to know:
 
