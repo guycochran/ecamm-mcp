@@ -128,6 +128,56 @@ export function onAirState(buttonLabel: unknown): OnAirState {
   return 'unknown'
 }
 
+export type BroadcastIntent = 'go_live' | 'record' | 'end'
+
+export type MainButtonPlan =
+  | { action: 'click'; expect: 'on-air' | 'off-air'; what: string }
+  | { action: 'none'; why: string; alreadyThere: boolean }
+
+/**
+ * Decide what, if anything, to do with Ecamm's one main button for a stated intent.
+ *
+ * The button is a toggle whose meaning depends on its label, so "click it" is never the
+ * request. The request is where the person wants to end up. That makes a repeated
+ * "go live" a no-op instead of an accidental "end", and refuses to click when the label
+ * means something else (Wait, the end-of-broadcast OK) or cannot be read at all.
+ *
+ * Idle labels: "New" (or "Go Live") is a broadcast; "Record" is Record Only mode.
+ */
+export function planMainButton(intent: BroadcastIntent, buttonLabel: unknown): MainButtonPlan {
+  const b = scalar(buttonLabel).trim()
+  const state = onAirState(b)
+  const none = (why: string, alreadyThere = false): MainButtonPlan => ({ action: 'none', why, alreadyThere })
+  if (state === 'busy') return none(`Ecamm is in the middle of starting or ending (button reads "${b}"). Wait for it to finish, then check the status.`)
+  if (state === 'unknown') {
+    return none(b
+      ? `Ecamm's main button reads "${b}", which this tool does not recognize, so it will not click it. If Ecamm is not in English, or this label is new, please report it.`
+      : 'Ecamm did not report its main button, so this tool will not click it.')
+  }
+  if (intent === 'end') {
+    if (state === 'on-air') return { action: 'click', expect: 'off-air', what: `End the broadcast or recording (click "${b}")` }
+    return none(state === 'ended' ? 'The broadcast has already ended; Ecamm is showing its summary.' : 'Nothing is live or recording.', true)
+  }
+  if (state === 'on-air') return none('Ecamm is already live or recording. Nothing was clicked, because clicking now would end it.', true)
+  if (state === 'ended') return none(`Ecamm is showing the summary from the last broadcast (button reads "${b}"). Dismiss it in Ecamm on the Mac, then try again.`)
+  const recordOnly = /^record$/i.test(b)
+  if (intent === 'go_live' && recordOnly) {
+    return none('Ecamm is in Record Only mode, so its button would start a recording, not a broadcast. Switch the Mode in Ecamm, or ask to record instead.')
+  }
+  if (intent === 'record' && !recordOnly) {
+    return none(`Ecamm is set to broadcast (button reads "${b}"), so its button would go live, not just record. Switch Ecamm's Mode to Record Only, or ask to go live instead.`)
+  }
+  return { action: 'click', expect: 'on-air', what: `${intent === 'record' ? 'Start recording' : 'Go live'} (click "${b}")` }
+}
+
+export interface TransitionResult {
+  /** verified: reached the expected state. failed: started, then went back. unknown: could not tell. */
+  outcome: 'verified' | 'failed' | 'unknown'
+  state: OnAirState
+  label: string
+  detail?: string
+}
+
 export type ThumbnailStatus = 'on-screen' | 'refreshed' | 'visited' | 'stored'
 
 export interface ThumbnailRefresh {
@@ -211,6 +261,9 @@ export function preflight(input: PreflightInput): { ready: boolean; summary: str
   }
 }
 
+const INFO_INTERVAL_MS = 2000
+const MAX_QUEUED_MUTATIONS = 32
+
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
 // ---------- client ----------
@@ -229,6 +282,8 @@ export interface ClientOptions {
    * Lets the very first request succeed instead of failing and needing a retry.
    */
   approvalWaitMs?: number
+  /** How long to watch Ecamm after Go Live / End before reporting an unknown outcome. Default 45 s. */
+  transitionTimeoutMs?: number
 }
 
 export type Permission = 'Allowed' | 'Denied' | 'Pending' | 'Not Found'
@@ -239,6 +294,11 @@ export class EcammClient {
   private readonly localPorts: LocalPortsFn
   private instance?: DiscoveredEcamm
   private infoCache?: { at: number; data: Record<string, unknown> }
+  /** When getInfo was last SENT. Kept apart from the cache so clearing the cache never shortens Ecamm's 2 s interval. */
+  private infoSentAt = 0
+  private infoChain: Promise<unknown> = Promise.resolve()
+  private mutations: Promise<unknown> = Promise.resolve()
+  private mutationsWaiting = 0
   private approved = false
   readonly clientName: string
 
@@ -331,6 +391,7 @@ export class EcammClient {
     }
     if (perm === 'Not Found') {
       // Any request registers the client and pops it into Ecamm's Remote Control list.
+      this.infoSentAt = Date.now() // counts toward Ecamm's 2 s getInfo interval
       try { await this.http.get('getInfo') } catch { /* side effect is the point */ }
       perm = await this.permission()
     }
@@ -356,17 +417,62 @@ export class EcammClient {
     await this.http.set(endpoint, params)
   }
 
-  /** Ecamm asks clients not to call getInfo more than every 2 s. */
-  async info(fresh = false): Promise<Record<string, unknown>> {
-    const now = Date.now()
-    if (!fresh && this.infoCache && now - this.infoCache.at < 2000) return this.infoCache.data
-    if (fresh && this.infoCache) {
-      const wait = 2000 - (now - this.infoCache.at)
+  /**
+   * Ecamm asks clients not to call getInfo more than every 2 s. Requests are sent one at
+   * a time, at least 2 s apart, however many callers ask at once. fresh = true means
+   * "sent after I asked", so a caller that has just changed something never gets an older
+   * answer; callers that arrive while such a request is pending share it.
+   */
+  info(fresh = false): Promise<Record<string, unknown>> {
+    const askedAt = Date.now()
+    if (!fresh && this.infoCache && askedAt - this.infoCache.at < INFO_INTERVAL_MS) return Promise.resolve(this.infoCache.data)
+    const run = this.infoChain.then(async () => {
+      const c = this.infoCache
+      if (c && (fresh ? c.at >= askedAt : Date.now() - c.at < INFO_INTERVAL_MS)) return c.data
+      const wait = INFO_INTERVAL_MS - (Date.now() - this.infoSentAt)
       if (wait > 0) await sleep(wait)
+      const sentAt = Date.now()
+      this.infoSentAt = sentAt
+      const data = await this.get<Record<string, unknown>>('getInfo')
+      this.infoCache = { at: sentAt, data: data && typeof data === 'object' && !Array.isArray(data) ? data : {} }
+      return this.infoCache.data
+    })
+    this.infoChain = run.catch(() => undefined)
+    return run
+  }
+
+  /**
+   * One mutation at a time. Wraps a whole operation (read, decide, change, verify), so two
+   * requests cannot interleave and double-toggle a mute or act on a scene that just changed.
+   * Take it at the tool boundary only, never inside another exclusive section.
+   *
+   * This orders commands from this process. Ecamm itself, a Stream Deck or another client
+   * can still change things in between, which is why operations read back what happened.
+   */
+  async exclusive<T>(fn: () => Promise<T>, maxWaitMs = 90_000): Promise<T> {
+    if (this.mutationsWaiting >= MAX_QUEUED_MUTATIONS) {
+      throw new EcammError('Too many Ecamm commands are already waiting. Nothing was sent for this one; try again shortly.', 'busy')
     }
-    const data = await this.get<Record<string, unknown>>('getInfo')
-    this.infoCache = { at: Date.now(), data: data && typeof data === 'object' && !Array.isArray(data) ? data : {} }
-    return this.infoCache.data
+    this.mutationsWaiting++
+    const previous = this.mutations
+    let release!: () => void
+    this.mutations = new Promise<void>((r) => (release = r))
+    let timer: ReturnType<typeof setTimeout> | undefined
+    try {
+      const timedOut = await Promise.race([
+        previous.then(() => false),
+        new Promise<boolean>((r) => (timer = setTimeout(() => r(true), maxWaitMs))),
+      ])
+      if (timedOut) {
+        throw new EcammError('An earlier Ecamm command is still running. Nothing was sent for this one; check Ecamm, then try again.', 'busy')
+      }
+      return await fn()
+    } finally {
+      if (timer) clearTimeout(timer)
+      this.mutationsWaiting--
+      // A request that gave up waiting must still not let later ones jump ahead of the one it was waiting on.
+      void previous.then(release)
+    }
   }
 
   // ---- lists ----
@@ -490,14 +596,32 @@ export class EcammClient {
   }
 
   /** After Go Live or Finish the button reads "Wait" for up to ~20 s. Poll until it settles. */
-  async settleMainButton(timeoutMs = 45000): Promise<{ label: string; state: OnAirState; settled: boolean }> {
-    const deadline = Date.now() + timeoutMs
-    let label = ''
+  /**
+   * After clicking the main button, watch until Ecamm reaches the state that was asked for.
+   * "No longer says Wait" is not success: a failed start goes Wait and then back to idle.
+   * The label can also stay put for a moment before Wait appears, so an unchanged label is
+   * only read as "nothing happened" after a grace period.
+   */
+  async verifyTransition(expect: 'on-air' | 'off-air', from: OnAirState): Promise<TransitionResult> {
+    const timeoutMs = this.opts.transitionTimeoutMs ?? 45_000
+    const graceMs = Math.min(10_000, timeoutMs)
+    const started = Date.now()
+    const reached = (s: OnAirState) => (expect === 'on-air' ? s === 'on-air' : s === 'idle' || s === 'ended')
+    let sawBusy = false
     for (;;) {
-      label = scalar((await this.info(true)).ButtonLabel).trim()
+      const label = scalar((await this.info(true)).ButtonLabel).trim()
       const state = onAirState(label)
-      if (state !== 'busy') return { label, state, settled: true }
-      if (Date.now() >= deadline) return { label, state, settled: false }
+      const elapsed = Date.now() - started
+      if (reached(state)) return { outcome: 'verified', state, label }
+      if (state === 'busy') sawBusy = true
+      else if (state === from && sawBusy) {
+        return { outcome: 'failed', state, label, detail: `Ecamm started the change and then went back to "${label}".` }
+      } else if (state === from && elapsed >= graceMs) {
+        return { outcome: 'unknown', state, label, detail: `The button still reads "${label}". The click may not have registered, or Ecamm may be waiting on a dialog.` }
+      }
+      if (elapsed >= timeoutMs) {
+        return { outcome: 'unknown', state, label, detail: `Gave up waiting after ${Math.round(timeoutMs / 1000)} s; the button reads "${label}". Check Ecamm before sending this again.` }
+      }
     }
   }
 

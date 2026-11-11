@@ -1,9 +1,9 @@
 import jpeg from 'jpeg-js'
 import { buildSceneSheet } from '../src/sheet.js'
 import { describe, expect, it } from 'vitest'
-import { EcammClient, flatten, normalizeImage, onAirState, preflight, resolveItem, scalar, summarizeInfo } from '../src/client.js'
+import { EcammClient, flatten, normalizeImage, onAirState, planMainButton, preflight, resolveItem, scalar, summarizeInfo } from '../src/client.js'
 import { chooseInstance, parseLsofPorts } from '../src/discovery.js'
-import { buildQuery, EcammHttp } from '../src/http.js'
+import { buildQuery, EcammHttp, isAcknowledgement } from '../src/http.js'
 import { startFake } from './fake-ecamm.js'
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { removeFromClaudeConfig, writeClaudeConfig } from '../src/cli.js'
@@ -381,5 +381,106 @@ describe('HTTP command acknowledgements', () => {
   })
   it.each(['{}', 'not JSON', '["Unsupported"]', '[]'])('does not claim success for %s', async (body) => {
     await expect(transport(body).set('setOverlayText')).rejects.toThrow('outcome is unknown')
+  })
+})
+
+describe('planMainButton', () => {
+  const click = (expect: string) => ({ action: 'click', expect })
+  const none = (alreadyThere: boolean) => ({ action: 'none', alreadyThere })
+  it.each([
+    ['go_live', 'New', click('on-air')],
+    ['go_live', 'Go Live', click('on-air')],
+    ['record', 'Record', click('on-air')],
+    ['end', 'Finish', click('off-air')],
+    ['go_live', 'Finish', none(true)], // already live: must not end it
+    ['record', 'Finish', none(true)],
+    ['end', 'New', none(true)],
+    ['end', 'OK', none(true)],
+    ['go_live', 'Record', none(false)], // would record, not broadcast
+    ['record', 'New', none(false)], // would broadcast, not just record
+    ['go_live', 'OK', none(false)], // OK only dismisses the summary
+    ['go_live', 'Wait', none(false)],
+    ['end', 'Wait', none(false)],
+    ['go_live', '', none(false)],
+    ['end', 'Beenden', none(false)], // unreadable: never guess
+  ] as const)('%s when the button reads "%s"', (intent, label, expected) => {
+    expect(planMainButton(intent, label)).toMatchObject(expected)
+  })
+})
+
+describe('command acknowledgements', () => {
+  it('accepts Done and Clicked it! bare, quoted, or in a one-element array', () => {
+    for (const body of ['Done', 'Done\n', '"Done"', '["Done"]', '["Clicked it!"]', 'Clicked it!']) expect(isAcknowledgement(body)).toBe(true)
+  })
+  it('rejects anything else, including empty and multi-element replies', () => {
+    for (const body of ['', '[]', '["Done","Done"]', '{"ok":true}', 'Access Denied', '<html>', '["Nope"]']) expect(isAcknowledgement(body)).toBe(false)
+  })
+})
+
+describe('getInfo pacing and the mutation queue', () => {
+  const connect = async () => {
+    const fake = await startFake()
+    const c = new EcammClient({ host: `127.0.0.1:${fake.port}`, stateDir: mkdtempSync(join(tmpdir(), 'ec-')) })
+    await c.scenes() // first contact registers with Ecamm, which itself sends one getInfo
+    const from = fake.state.log.length
+    const sends = () => fake.state.log.slice(from).filter((l) => l.path === 'getInfo').map((l) => l.at)
+    return { fake, c, sends }
+  }
+
+  it('concurrent callers share one getInfo', async () => {
+    const { fake, c, sends } = await connect()
+    await Promise.all([c.info(true), c.info(true), c.info(), c.info(true)])
+    expect(sends()).toHaveLength(1)
+    const registration = fake.state.log.find((l) => l.path === 'getInfo')!.at
+    expect(sends()[0] - registration).toBeGreaterThanOrEqual(1950) // the registration request counts too
+    fake.server.close()
+  }, 10000)
+
+  it('keeps 2 s between sends even when a command has just cleared the cache', async () => {
+    const { fake, c, sends } = await connect()
+    await c.info()
+    await c.set('setVolume', { bus: 'mic', volume: 50 }) // clears the cache
+    await Promise.all([c.info(), c.info(true)])
+    const [first, second, ...rest] = sends()
+    expect(rest).toHaveLength(0)
+    expect(second - first).toBeGreaterThanOrEqual(1950)
+    fake.server.close()
+  }, 10000)
+
+  it('fresh means sent after the caller asked', async () => {
+    const { fake, c } = await connect()
+    expect((await c.info()).ButtonLabel).toBe('New')
+    fake.state.live = true
+    expect((await c.info()).ButtonLabel).toBe('New') // cached, by design
+    expect((await c.info(true)).ButtonLabel).toBe('Finish')
+    fake.server.close()
+  }, 10000)
+
+  it('runs exclusive sections one at a time, in order, and survives a failure', async () => {
+    const { fake, c } = await connect()
+    const order: string[] = []
+    const step = (name: string, ms: number, fail = false) => c.exclusive(async () => {
+      order.push(`${name}:start`)
+      await new Promise((r) => setTimeout(r, ms))
+      order.push(`${name}:end`)
+      if (fail) throw new Error('boom')
+      return name
+    })
+    const results = await Promise.allSettled([step('a', 60), step('b', 10, true), step('c', 5)])
+    expect(order).toEqual(['a:start', 'a:end', 'b:start', 'b:end', 'c:start', 'c:end'])
+    expect(results.map((r) => r.status)).toEqual(['fulfilled', 'rejected', 'fulfilled'])
+    fake.server.close()
+  })
+
+  it('a request that gives up waiting sends nothing and does not let later ones jump the queue', async () => {
+    const { fake, c } = await connect()
+    const order: string[] = []
+    const slow = c.exclusive(async () => { await new Promise((r) => setTimeout(r, 300)); order.push('slow') })
+    const impatient = c.exclusive(async () => { order.push('impatient') }, 50)
+    const patient = c.exclusive(async () => { order.push('patient') })
+    await expect(impatient).rejects.toThrow(/still running/)
+    await Promise.all([slow, patient])
+    expect(order).toEqual(['slow', 'patient'])
+    fake.server.close()
   })
 })

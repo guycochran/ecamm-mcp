@@ -7,6 +7,18 @@ import jpeg from 'jpeg-js'
  * toggle-only commands, a ~400 ms scene switch, and the Not Found -> Pending -> Allowed flow.
  */
 export interface FakeState {
+  /** Record Only mode: the idle main button reads "Record" instead of "New". */
+  recordOnly?: boolean
+  /** After a main-button click the label stays put this long before "Wait" appears. */
+  clickLagMs?: number
+  /** How long "Wait" shows. */
+  busyMs?: number
+  /** The next click goes to "Wait" and then back to where it was (a start that fails). */
+  failNextClick?: boolean
+  /** The next click goes to "Wait" and never leaves. */
+  stuckBusy?: boolean
+  /** Answer set commands with the bare word Done, as the Companion module reports, instead of ["Done"]. */
+  bareAcks?: boolean
   /** Force the main button label, e.g. a localized or unexpected one. */
   buttonLabel?: string
   /** Called just after a scene lands, to simulate a person or another controller acting mid-sequence. */
@@ -24,7 +36,7 @@ export interface FakeState {
   volume: Record<string, number>
   overlays: Record<string, Record<string, { title: string; visible: boolean; text?: string }>>
   live: boolean
-  log: { path: string; query: Record<string, string>; headers: IncomingMessage['headers'] }[]
+  log: { path: string; query: Record<string, string>; headers: IncomingMessage['headers']; at: number }[]
   comments: string[]
   markers: string[]
   paused: boolean
@@ -86,12 +98,12 @@ export function startFake(): Promise<{ server: Server; port: number; state: Fake
     const url = new URL(req.url ?? '/', 'http://x')
     const path = url.pathname.slice(1)
     const q = Object.fromEntries(url.searchParams)
-    state.log.push({ path, query: q, headers: req.headers })
+    state.log.push({ path, query: q, headers: req.headers, at: Date.now() })
     const json = (v: unknown) => {
       res.writeHead(200, { 'Content-Type': 'application/json' })
       res.end(JSON.stringify(v))
     }
-    const done = () => json(['Done'])
+    const done = () => (state.bareAcks ? (res.writeHead(200, { 'Content-Type': 'text/plain' }), res.end('Done')) : json(['Done']))
 
     if (!req.headers['ecammlive-uuid'] || !req.headers['ecammlive-clientname']) {
       res.writeHead(400); return res.end('missing headers')
@@ -108,7 +120,7 @@ export function startFake(): Promise<{ server: Server; port: number; state: Fake
     switch (path) {
       case 'getInfo':
         return json({
-          ButtonLabel: state.buttonLabel ?? (state.busyUntil && Date.now() < state.busyUntil ? 'Wait' : state.live ? 'Finish' : 'New'),
+          ButtonLabel: state.buttonLabel ?? (state.busyUntil && Date.now() < state.busyUntil ? 'Wait' : state.live ? 'Finish' : state.recordOnly ? 'Record' : 'New'),
           PauseButtonLabel: state.paused ? 'Resume' : 'Pause',
           CurrentScene: state.scene,
           Viewers: state.live ? '12' : '0',
@@ -156,7 +168,16 @@ export function startFake(): Promise<{ server: Server; port: number; state: Fake
       case 'getChannels': return json({ items: [{ title: 'OHG YouTube', UUID: 'CH-YT' }] })
       case 'getProfileList': return json({ items: [{ title: 'Default Show', UUID: 'P-1' }] })
       case 'getVideoList': return json({ items: [{ title: '-No recent items-', UUID: '' }] })
-      case 'setClickButton': state.live = !state.live; state.busyUntil = Date.now() + 2500; return done()
+      case 'setClickButton': {
+        const target = !state.live
+        const fail = state.failNextClick
+        state.failNextClick = false
+        setTimeout(() => {
+          state.busyUntil = state.stuckBusy ? Number.MAX_SAFE_INTEGER : Date.now() + (state.busyMs ?? 2500)
+          if (!fail) state.live = target
+        }, state.clickLagMs ?? 0)
+        return done()
+      }
       case 'setComment': state.comments.push(q.text); return done()
       case 'setAddMarker': state.markers.push(q.text ?? ''); return done()
       case 'setClickPause': state.paused = !state.paused; return json(['Clicked it!'])

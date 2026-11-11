@@ -26,7 +26,7 @@ beforeAll(async () => {
   const transport = new StdioClientTransport({
     command: process.execPath,
     args: [process.env.ECAMM_MCP_ENTRY ?? join(__dirname, '..', 'dist', 'index.js')],
-    env: { ...process.env, HOME: home, ECAMM_HOST: `127.0.0.1:${fake.port}` } as Record<string, string>,
+    env: { ...process.env, HOME: home, ECAMM_HOST: `127.0.0.1:${fake.port}`, ECAMM_TRANSITION_TIMEOUT_S: '9' } as Record<string, string>,
   })
   client = new Client({ name: 'test', version: '1' })
   await client.connect(transport)
@@ -110,15 +110,204 @@ describe('ecamm-mcp end to end', () => {
     expect(missing.isError).toBe(true)
   })
 
-  it('go live is a dry run without confirm', async () => {
-    const r = await call('ecamm_start_stop', { destination: 'youtube' })
-    expect(r.json).toMatchObject({ dryRun: true, wouldDo: 'Click "New"', destination: 'OHG YouTube' })
-    expect(state.live).toBe(false)
-    const ok = await call('ecamm_start_stop', { destination: 'youtube', title: 'Office Hours', confirm: true })
-    expect(ok.json).toMatchObject({ clicked: 'New', buttonNowSays: 'Finish', state: 'on-air', confirmed: true })
-    const sent = state.log.find((l) => l.path === 'setClickButton')!
-    expect(sent.query).toMatchObject({ channel: 'CH-YT', title: 'Office Hours' })
+  describe('going live, recording and ending by intent', () => {
+    const clicks = () => state.log.filter((l) => l.path === 'setClickButton').length
+    const idle = () => {
+      state.live = false
+      state.busyUntil = 0
+      state.buttonLabel = undefined
+      state.recordOnly = false
+      state.clickLagMs = undefined
+      state.busyMs = 300
+      state.failNextClick = false
+      state.stuckBusy = false
+    }
+
+    it('never clicks without an intent, even with confirm', async () => {
+      idle()
+      const before = clicks()
+      const r = await call('ecamm_start_stop', { confirm: true })
+      expect(clicks()).toBe(before)
+      expect(r.json).toMatchObject({ changed: false, needsIntent: true, mainButton: 'New', state: 'idle' })
+    })
+
+    it('go_live is a dry run without confirm, then verifies it is on air', async () => {
+      idle()
+      const dry = await call('ecamm_start_stop', { intent: 'go_live', destination: 'youtube' })
+      expect(dry.json).toMatchObject({ dryRun: true, wouldDo: 'Go live (click "New")', destination: 'OHG YouTube' })
+      expect(state.live).toBe(false)
+      const ok = await call('ecamm_start_stop', { intent: 'go_live', destination: 'youtube', title: 'Office Hours', confirm: true })
+      expect(ok.json).toMatchObject({ intent: 'go_live', clicked: 'New', outcome: 'verified', state: 'on-air', mainButton: 'Finish' })
+      const sent = state.log.filter((l) => l.path === 'setClickButton').at(-1)!
+      expect(sent.query).toMatchObject({ channel: 'CH-YT', title: 'Office Hours' })
+    }, 20000)
+
+    it('a repeated go_live does not end the broadcast', async () => {
+      expect(state.live).toBe(true)
+      const before = clicks()
+      const again = await call('ecamm_start_stop', { intent: 'go_live', confirm: true })
+      expect(clicks()).toBe(before)
+      expect(state.live).toBe(true)
+      expect(again.json).toMatchObject({ changed: false, alreadyInRequestedState: true, state: 'on-air' })
+    }, 20000)
+
+    it('end verifies it is off air, and a repeated end does nothing', async () => {
+      const r = await call('ecamm_start_stop', { intent: 'end', confirm: true })
+      expect(r.json).toMatchObject({ intent: 'end', clicked: 'Finish', outcome: 'verified', state: 'idle' })
+      expect(state.live).toBe(false)
+      const before = clicks()
+      const again = await call('ecamm_start_stop', { intent: 'end', confirm: true })
+      expect(clicks()).toBe(before)
+      expect(again.json).toMatchObject({ changed: false, alreadyInRequestedState: true })
+    }, 20000)
+
+    it('refuses go_live in Record Only mode and record in broadcast mode', async () => {
+      idle()
+      state.recordOnly = true
+      const before = clicks()
+      const live = await call('ecamm_start_stop', { intent: 'go_live', confirm: true })
+      expect(live.json).toMatchObject({ changed: false, alreadyInRequestedState: false })
+      expect(live.json.note).toContain('Record Only')
+      state.recordOnly = false
+      const rec = await call('ecamm_start_stop', { intent: 'record', confirm: true })
+      expect(rec.json.note).toContain('set to broadcast')
+      expect(clicks()).toBe(before)
+    }, 20000)
+
+    it('record starts a recording in Record Only mode', async () => {
+      idle()
+      state.recordOnly = true
+      const r = await call('ecamm_start_stop', { intent: 'record', confirm: true })
+      expect(r.json).toMatchObject({ clicked: 'Record', outcome: 'verified', state: 'on-air' })
+      await call('ecamm_start_stop', { intent: 'end', confirm: true })
+      idle()
+    }, 20000)
+
+    it.each([
+      ['starting or ending', () => { state.busyUntil = Date.now() + 60000 }, 'starting or ending'],
+      ['the end-of-broadcast summary', () => { state.buttonLabel = 'OK' }, 'summary'],
+      ['a label it cannot read', () => { state.buttonLabel = 'Aufnehmen' }, 'does not recognize'],
+      ['no label at all', () => { state.buttonLabel = '' }, 'did not report'],
+    ])('does not click during %s', async (_n, arrange, reason) => {
+      idle()
+      arrange()
+      const before = clicks()
+      const r = await call('ecamm_start_stop', { intent: 'go_live', confirm: true })
+      expect(clicks()).toBe(before)
+      expect(r.json.changed).toBe(false)
+      expect(r.json.note).toContain(reason)
+      idle()
+    }, 20000)
+
+    it('waits out a late transition: the label holds, then Wait, then Finish', async () => {
+      idle()
+      state.clickLagMs = 2500
+      state.busyMs = 2500
+      const r = await call('ecamm_start_stop', { intent: 'go_live', confirm: true })
+      expect(r.json).toMatchObject({ outcome: 'verified', state: 'on-air' })
+      await call('ecamm_start_stop', { intent: 'end', confirm: true })
+      idle()
+    }, 40000)
+
+    it('reports a start that fails instead of calling "no longer Wait" success', async () => {
+      idle()
+      state.failNextClick = true
+      state.busyMs = 2500
+      const r = await call('ecamm_start_stop', { intent: 'go_live', confirm: true })
+      expect(r.json).toMatchObject({ outcome: 'failed', state: 'idle' })
+      expect(state.live).toBe(false)
+      idle()
+    }, 40000)
+
+    it('reports unknown, with a warning not to repeat blindly, when Ecamm never settles', async () => {
+      idle()
+      state.stuckBusy = true
+      const r = await call('ecamm_start_stop', { intent: 'go_live', confirm: true })
+      expect(r.json).toMatchObject({ outcome: 'unknown', state: 'busy' })
+      expect(r.json.doNotRepeatBlindly).toBeTruthy()
+      expect(state.live).toBe(true) // the command WAS applied; only the confirmation timed out
+      idle()
+    }, 40000)
+  })
+
+  describe('one change at a time', () => {
+    it('two simultaneous mute requests toggle once and both report muted', async () => {
+      state.mute.mic = false
+      const before = state.log.filter((l) => l.path === 'setMute').length
+      const [a, b] = await Promise.all([
+        call('ecamm_set_mute', { bus: 'mic', muted: true }),
+        call('ecamm_set_mute', { bus: 'mic', muted: true }),
+      ])
+      expect(state.log.filter((l) => l.path === 'setMute').length).toBe(before + 1)
+      expect(state.mute.mic).toBe(true)
+      expect(a.json.nowMuted).toBe(true)
+      expect(b.json.nowMuted).toBe(true)
+      await call('ecamm_set_mute', { bus: 'mic', muted: false })
+    }, 20000)
+
+    it('an overlay request queued behind a scene change acts on the new scene, not the old one', async () => {
+      await call('ecamm_switch_scene', { scene: 'Me (full)' })
+      const logo = () => state.overlays['S-ME']['O-LOGO'].visible
+      const wasVisible = logo()
+      const [sw, ov] = await Promise.all([
+        call('ecamm_switch_scene', { scene: 'Me + Guest Half' }),
+        call('ecamm_set_overlay', { overlay: 'OHG Logo', state: 'hide' }),
+      ])
+      expect(sw.json.confirmed).toBe(true)
+      expect(ov.isError).toBe(true) // that overlay is not in the scene now on screen
+      expect(logo()).toBe(wasVisible) // and the old scene's overlay was not toggled blind
+      await call('ecamm_switch_scene', { scene: 'Me (full)' })
+    }, 20000)
+
+    it('a failed command does not block the ones queued behind it', async () => {
+      const [bad, good] = await Promise.all([
+        call('ecamm_set_overlay', { overlay: 'No Such Overlay', state: 'show' }),
+        call('ecamm_set_volume', { bus: 'mic', volume: 80 }),
+      ])
+      expect(bad.isError).toBe(true)
+      expect(good.isError).toBeFalsy()
+      expect(state.volume.mic).toBe(80)
+      await call('ecamm_set_volume', { bus: 'mic', volume: 100 })
+    }, 20000)
+
+    it('reads are not held up by a long-running change', async () => {
+      state.live = false; state.busyUntil = 0; state.buttonLabel = undefined; state.recordOnly = false
+      state.clickLagMs = undefined; state.busyMs = 3000
+      const going = call('ecamm_start_stop', { intent: 'go_live', confirm: true })
+      await new Promise((r) => setTimeout(r, 300))
+      const t = Date.now()
+      const scenes = await call('ecamm_list_scenes')
+      expect(Date.now() - t).toBeLessThan(1500)
+      expect(scenes.isError).toBeFalsy()
+      await going
+      await call('ecamm_start_stop', { intent: 'end', confirm: true })
+      state.busyMs = 300
+    }, 40000)
+
+    it('accepts the bare-word acknowledgement a real Ecamm is reported to send', async () => {
+      state.bareAcks = true
+      const r = await call('ecamm_set_volume', { bus: 'mic', volume: 90 })
+      state.bareAcks = false
+      expect(r.isError).toBeFalsy()
+      expect(state.volume.mic).toBe(90)
+      await call('ecamm_set_volume', { bus: 'mic', volume: 100 })
+    })
+  })
+
+  it('pause and resume say where to end up, so repeating one does nothing', async () => {
+    state.paused = false
+    const count = () => state.log.filter((l) => l.path === 'setClickPause').length
+    const p = await call('ecamm_recording', { action: 'pause', confirm: true })
+    expect(p.json).toMatchObject({ clicked: 'Pause', pauseButtonNowSays: 'Resume', verified: true })
+    const before = count()
+    const again = await call('ecamm_recording', { action: 'pause', confirm: true })
+    expect(count()).toBe(before)
+    expect(again.json).toMatchObject({ changed: false, alreadyInRequestedState: true })
+    const r = await call('ecamm_recording', { action: 'resume', confirm: true })
+    expect(r.json.pauseButtonNowSays).toBe('Pause')
+    expect(state.paused).toBe(false)
   }, 20000)
+
 
   it('encodes spaces as %20 (Ecamm does not decode +)', async () => {
     await call('ecamm_post_comment', { text: 'hello office hours', confirm: true })

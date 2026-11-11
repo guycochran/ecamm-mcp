@@ -117,6 +117,14 @@ It also tells you which scene you'll start on and which overlays are showing. It
 
 To be clear about what that means: if you type "go live", it goes live without a second prompt. What it won't do is go live, end a broadcast or post publicly as a side effect of some other request.
 
+Ecamm has one main button, and the same click starts or ends a broadcast depending on what the button says at that moment. So the server never "clicks the button". It is told where you want to end up: go live, record, or end.
+
+- **Saying "go live" twice won't end your show.** The second request sees you're already live and does nothing.
+- **"Go live" won't start a recording by mistake**, and "record" won't go live. If Ecamm is in the other mode, it says so and stops.
+- **It won't click a button it can't read.** While Ecamm says Wait, shows its end-of-broadcast summary, or shows a label this tool doesn't know, nothing is clicked.
+- **It reports what happened, not what it hoped.** After a click it watches Ecamm and says verified, failed, or unknown. On unknown it tells Claude to check before trying again.
+- **One change at a time.** Requests that change Ecamm run in order, start to finish, so two of them can't trip over each other. Something else changing Ecamm at the same moment (you, a Stream Deck) can still happen; that's why results are read back.
+
 Want Claude to look but not touch during a show? Turn on read-only mode: in the extension's settings, or `ECAMM_READ_ONLY=1` for the Terminal install.
 
 ## Something's not working
@@ -160,7 +168,8 @@ Still stuck? [Open an issue](https://github.com/guycochran/ecamm-mcp/issues).
 | `ecamm_sound`, `ecamm_toggle_audio_filter` | Sound effects and audio filters |
 | `ecamm_toggle` | PiP, Preview Mode, publish preview, hide UI, live demo |
 | `ecamm_comment_overlay`, `ecamm_add_marker` | Show the latest comment on screen, drop a marker |
-| `ecamm_start_stop`, `ecamm_recording` | Go Live / Record / End, pause or split the recording (confirm required) |
+| `ecamm_start_stop` | Go live, record, or end, by stated intent (`go_live`, `record`, `end`). Verifies the result. Confirm required |
+| `ecamm_recording` | Pause, resume, or split the recording. Confirm required |
 | `ecamm_post_comment`, `ecamm_set_profile` | Post a public comment, switch Profile (confirm required) |
 | `ecamm_zoom` | Ecamm for Zoom: view controls run directly, meeting controls need confirm |
 | `ecamm_discover` | Find Ecamm Live again, or see which Macs on the network are running it |
@@ -176,6 +185,7 @@ Things it handles so you don't have to:
 
 - Overlays can only be read and controlled for the **current scene**.
 - The only way to tell whether you're live is the main button's label (`New` or `Record` when idle, `Finish` when live or recording, `Wait` in between), which is what `ecamm_status` reports.
+- **English labels only, for now.** Ecamm 4.6 added other languages. If your Ecamm isn't in English the button labels may differ, and this tool will then refuse to go live, end, or refresh scene pictures, because it won't act on a label it can't read. Status, scenes, overlays and audio are unaffected. Please open an issue with the labels you see.
 - Ecamm documents this API in its [Automating Ecamm](https://support.ecamm.com/en/articles/17683976-automating-ecamm) help article. This project isn't made by Ecamm, so a future Ecamm update could still get ahead of it.
 - A mute you set by hand may not survive a scene change. Seen once in testing; scenes appear to carry their own audio settings.
 - **Marker persistence needs a new real-device test.** Earlier builds used a different endpoint from the one documented by Ecamm. The current source uses `setAddMarker`, also found in Ecamm's bundled Stream Deck plugin. The tool reports acceptance, not verified marker-file creation.
@@ -242,11 +252,11 @@ Releases: bump the version in `package.json`, `src/version.ts` and `mcpb/manifes
 
 `npm test` runs unit tests plus an end-to-end run of the real MCP server against a fake Ecamm that reproduces the real response shapes, the toggle behavior, the scene-switch delay, the Allow flow, a relaunch on a new port, and loopback discovery. CI runs the same suite against the shipped bundle and runs `install.sh` on real Macs, with and without Node.js installed.
 
-Against a real Ecamm Live so far, including an unlisted YouTube test broadcast: discovery, the Allow dialog, status, the pre-show check, all lists, thumbnails (including from a phone), scene switch and step, overlays, mute, volume, sound effects, camera, source mode, preview mode, the Zoom panel, going live and ending, a public chat comment, the comment overlay, splitting the recording, and the dry-run guard on Go Live, profile switch and Zoom end. Not yet run against a real Ecamm: pausing a recording, audio filters and video playback. If something behaves differently on your setup, please open an issue.
+Against a real Ecamm Live, on versions 0.1.1 through 0.2.3, including an unlisted YouTube test broadcast: discovery, the Allow dialog, status, the pre-show check, all lists, thumbnails (including from a phone), scene switch and step, overlays, mute, volume, sound effects, camera, source mode, preview mode, the Zoom panel, going live and ending, a public chat comment, the comment overlay, splitting the recording, and the dry-run guard on Go Live, profile switch and Zoom end. Not yet run against a real Ecamm: pausing a recording, audio filters and video playback. If something behaves differently on your setup, please open an issue. Not yet run against a real Ecamm, and tested only against the simulator: the corrected marker and pause commands, overlay text, the system-audio and Zoom-sharing names, stricter command acknowledgements, the scene sheet and its refresh, go live / record / end by intent, and pause / resume by intent. The simulator's acknowledgement format is taken from Ecamm's documentation and has not been compared with a real Ecamm.
 
 ## Credits
 
-Development notes: [API and Stream Deck research](docs/RESEARCH.md) and [Codex / Claude handoff](docs/CLAUDE_HANDOFF.md). New compatibility changes and overlay text are simulator-tested; see the handoff for the remaining real-Ecamm checks.
+Development notes: [API and Stream Deck research](docs/RESEARCH.md) and [Codex / Claude handoff](docs/CLAUDE_HANDOFF.md). The API corrections, overlay text, the scene sheet, broadcast intent and command ordering are simulator-tested only; see the handoff for the real-Ecamm checks still to do.
 
 The scene sheet's label font is a bitmap rendered from DejaVu Sans Mono Bold, used under the DejaVu Fonts license. JPEG handling is jpeg-js (BSD-3-Clause).
 

@@ -12,7 +12,7 @@ export type QueryParams = Record<string, QueryValue>
 export class EcammError extends Error {
   constructor(
     message: string,
-    readonly kind: 'unreachable' | 'timeout' | 'http' | 'parse' | 'permission' | 'not_found' | 'ambiguous' | 'blocked',
+    readonly kind: 'unreachable' | 'timeout' | 'http' | 'parse' | 'permission' | 'not_found' | 'ambiguous' | 'blocked' | 'busy',
   ) {
     super(message)
   }
@@ -37,6 +37,21 @@ export function buildQuery(params?: QueryParams): string {
     .filter(([, v]) => v !== undefined && v !== '')
     .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(String(v))}`)
   return pairs.length ? `?${pairs.join('&')}` : ''
+}
+
+const ACKS = new Set(['done', 'clicked it!'])
+
+/**
+ * Ecamm's own PDF shows set commands answering ["Done"] or ["Clicked it!"]. The Companion
+ * module, which is tested against a real Ecamm, reports the bare word Done with no JSON
+ * around it. Until a real device settles which, accept the same two words in any of the
+ * shapes they could arrive in: bare, a JSON string, or a one-element JSON array.
+ */
+export function isAcknowledgement(body: string): boolean {
+  let value: unknown = body
+  try { value = JSON.parse(body) } catch { /* bare text */ }
+  if (Array.isArray(value) && value.length === 1) value = value[0]
+  return typeof value === 'string' && ACKS.has(value.trim().toLowerCase())
 }
 
 export class EcammHttp {
@@ -94,11 +109,11 @@ export class EcammHttp {
     if (/access denied/i.test(body)) {
       throw new EcammError(`${endpoint}: Ecamm denied the command. Check Remote Control permissions.`, 'permission')
     }
-    let acknowledgement: unknown
-    try { acknowledgement = JSON.parse(body) } catch { /* report an unknown outcome below */ }
-    if (!Array.isArray(acknowledgement) || acknowledgement.length !== 1 ||
-        !['Done', 'Clicked it!'].includes(acknowledgement[0])) {
-      throw new EcammError(`${endpoint}: unrecognized command response; the outcome is unknown. Check Ecamm before retrying.`, 'parse')
+    if (!isAcknowledgement(body)) {
+      throw new EcammError(
+        `${endpoint}: unrecognized command response (${JSON.stringify(body.slice(0, 80))}); the outcome is unknown. Check Ecamm before retrying.`,
+        'parse',
+      )
     }
   }
 }

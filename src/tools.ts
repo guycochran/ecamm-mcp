@@ -1,7 +1,7 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { z } from 'zod'
 import { buildSceneSheet, type SheetCell } from './sheet.js'
-import { AUDIO_BUSES, apiAudioBus, EcammClient, onAirState, preflight, resolveItem, scalar, summarizeInfo, yes, type Item, type ThumbnailRefresh, type ThumbnailStatus } from './client.js'
+import { AUDIO_BUSES, apiAudioBus, EcammClient, onAirState, planMainButton, preflight, resolveItem, scalar, summarizeInfo, yes, type BroadcastIntent, type Item, type ThumbnailRefresh, type ThumbnailStatus } from './client.js'
 import { EcammError } from './http.js'
 
 type Content = { type: 'text'; text: string } | { type: 'image'; data: string; mimeType: string }
@@ -29,7 +29,8 @@ export function registerTools(server: McpServer, client: EcammClient, opts: { re
         if (tier !== 'read' && opts.readOnly) {
           throw new EcammError('ecamm-mcp is in read-only mode (ECAMM_READ_ONLY=1).', 'blocked')
         }
-        return await fn(args)
+        // Anything that changes Ecamm runs one at a time, start to finish.
+        return tier === 'read' ? await fn(args) : await client.exclusive(() => fn(args))
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err)
         return { content: [{ type: 'text', text: `Error: ${msg}` }], isError: true }
@@ -494,8 +495,13 @@ export function registerTools(server: McpServer, client: EcammClient, opts: { re
     'ecamm_start_stop',
     {
       description:
-        'Click the main Go Live / Record / End button. This STARTS OR ENDS a live broadcast or recording, depending on its current label. Waits until Ecamm finishes starting or ending and reports the resulting state (on-air, idle, ended). Optional destination (from ecamm_list destinations) and title/description for a new broadcast. Requires confirm: true.',
+        'Go live, start a recording, or end one. State where the person wants to end up with intent: "go_live", "record" or "end". ' +
+        'Ecamm has a single button whose meaning changes with its label, so this never just clicks it: asking to go live while already live does nothing (it will not end the broadcast), ' +
+        'go_live is refused in Record Only mode and record is refused in broadcast mode, and nothing is clicked while Ecamm is starting, ending, showing its end summary, or showing a label this tool cannot read. ' +
+        'After clicking it watches Ecamm and reports outcome: verified, failed or unknown. Optional destination (from ecamm_list destinations), title and description apply to go_live. ' +
+        'Requires confirm: true. Calls without intent are answered with what the button currently means and are never clicked.',
       inputSchema: {
+        intent: z.enum(['go_live', 'record', 'end']).optional().describe('Where the person wants to end up. Required to do anything.'),
         destination: z.string().optional(),
         title: z.string().optional(),
         description: z.string().optional(),
@@ -503,21 +509,39 @@ export function registerTools(server: McpServer, client: EcammClient, opts: { re
       },
       annotations: ann('on-air', 'Go live / record / end'),
     },
-    wrap('on-air', async (a: { destination?: string; title?: string; description?: string; confirm?: boolean }) => {
+    wrap('on-air', async (a: { intent?: BroadcastIntent; destination?: string; title?: string; description?: string; confirm?: boolean }) => {
       const before = await client.info(true)
-      const dest = a.destination ? resolveItem(await client.channels(), a.destination, 'destination') : undefined
-      if (!a.confirm) {
-        return dryRun(`Click "${before.ButtonLabel}"`, { destination: dest?.title ?? '(scheduled/default)', title: a.title })
+      const buttonLabel = scalar(before.ButtonLabel).trim()
+      const from = onAirState(buttonLabel)
+      if (!a.intent) {
+        return text({
+          changed: false,
+          needsIntent: true,
+          mainButton: buttonLabel || null,
+          state: from,
+          note: 'Nothing was clicked. Call again with intent: "go_live", "record" or "end" (and confirm: true). A bare click is no longer supported because the same click starts or ends a broadcast depending on timing.',
+        })
       }
-      await client.set('setClickButton', { channel: dest?.id, title: a.title, desc: a.description })
-      const after = await client.settleMainButton()
+      const plan = planMainButton(a.intent, buttonLabel)
+      if (plan.action === 'none') {
+        return text({ changed: false, intent: a.intent, alreadyInRequestedState: plan.alreadyThere, state: from, mainButton: buttonLabel || null, note: plan.why })
+      }
+      const starting = plan.expect === 'on-air'
+      const dest = starting && a.destination ? resolveItem(await client.channels(), a.destination, 'destination') : undefined
+      if (!a.confirm) {
+        return dryRun(plan.what, starting && a.intent === 'go_live' ? { destination: dest?.title ?? '(scheduled/default)', title: a.title } : {})
+      }
+      await client.set('setClickButton', starting ? { channel: dest?.id, title: a.title, desc: a.description } : undefined)
+      const after = await client.verifyTransition(plan.expect, from)
       return text({
-        clicked: before.ButtonLabel,
-        buttonNowSays: after.label,
+        intent: a.intent,
+        clicked: buttonLabel,
+        outcome: after.outcome,
         state: after.state,
-        confirmed: after.settled,
-        ...(after.settled ? {} : { note: 'Ecamm still says "Wait". Check ecamm_status in a few seconds.' }),
-        ...(after.state === 'ended' ? { note: 'Broadcast ended. Ecamm is showing its summary; click OK there to finish up.' } : {}),
+        mainButton: after.label,
+        ...(after.detail ? { detail: after.detail } : {}),
+        ...(after.state === 'ended' ? { note: 'Ended. Ecamm is showing its summary; dismiss it on the Mac before the next broadcast.' } : {}),
+        ...(after.outcome === 'unknown' ? { doNotRepeatBlindly: 'The click was sent. Check ecamm_status before sending this again, so a second click does not undo the first.' } : {}),
       })
     }),
   )
@@ -525,16 +549,34 @@ export function registerTools(server: McpServer, client: EcammClient, opts: { re
   server.registerTool(
     'ecamm_recording',
     {
-      description: 'Pause/resume the current recording, or split into a new recording file while streaming/recording. Requires confirm: true.',
-      inputSchema: { action: z.enum(['pause_resume', 'new_file']), ...confirmArg },
+      description:
+        'Pause or resume the current recording, or split into a new recording file while streaming/recording. ' +
+        'action "pause" and "resume" say where to end up: pausing an already paused recording does nothing. "pause_resume" is the old toggle, kept for compatibility. Requires confirm: true.',
+      inputSchema: { action: z.enum(['pause', 'resume', 'pause_resume', 'new_file']), ...confirmArg },
       annotations: ann('on-air', 'Pause / split recording'),
     },
-    wrap('on-air', async ({ action, confirm }: { action: string; confirm?: boolean }) => {
+    wrap('on-air', async ({ action, confirm }: { action: 'pause' | 'resume' | 'pause_resume' | 'new_file'; confirm?: boolean }) => {
       const info = await client.info(true)
-      if (!confirm) return dryRun(action === 'pause_resume' ? `Click "${info.PauseButtonLabel}"` : 'Start a new recording file', {})
-      await client.set(action === 'pause_resume' ? 'setClickPause' : 'setStartNewRecording')
-      const after = await client.info(true)
-      return text({ done: action, pauseButtonNowSays: after.PauseButtonLabel })
+      const pauseLabel = scalar(info.PauseButtonLabel).trim()
+      if (action === 'new_file') {
+        if (!confirm) return dryRun('Start a new recording file', {})
+        await client.set('setStartNewRecording')
+        return text({ done: action, accepted: true, verified: false, note: 'Ecamm accepted the request. The Remote API does not report whether a new file was started.' })
+      }
+      if (action !== 'pause_resume') {
+        const isPause = /^pause/i.test(pauseLabel)
+        const isResume = /^resume/i.test(pauseLabel)
+        if (!isPause && !isResume) {
+          return text({ changed: false, pauseButton: pauseLabel || null, note: `Ecamm's pause button reads "${pauseLabel}", so there is nothing to ${action} right now.` })
+        }
+        if ((action === 'pause') !== isPause) {
+          return text({ changed: false, alreadyInRequestedState: true, pauseButton: pauseLabel, note: action === 'pause' ? 'The recording is already paused.' : 'The recording is already running.' })
+        }
+      }
+      if (!confirm) return dryRun(`Click "${pauseLabel}"`, {})
+      await client.set('setClickPause')
+      const after = scalar((await client.info(true)).PauseButtonLabel).trim()
+      return text({ done: action, clicked: pauseLabel, pauseButtonNowSays: after, verified: after !== pauseLabel })
     }),
   )
 

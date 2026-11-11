@@ -2,6 +2,61 @@
 
 Updated November 10, 2026 (America/Los_Angeles).
 
+## Claude update, November 10, 2026 (evening)
+
+Branch `claude/broadcast-intent` = `main` + `codex/ecamm-api-alignment` (#8) + `scene-sheet` (#7), reconciled, plus sections A and B below. Draft PR opened against `main`. Everything in this update is **simulator-only**. No real Ecamm control was operated for it.
+
+### Review of #8
+
+- **Blocker, fixed on this branch: acknowledgement format.** #8 accepts only a one-element JSON array, `["Done"]` or `["Clicked it!"]`. The Companion module, whose tests run against a real Ecamm, states that set commands answer with the bare word `Done` and that parsing it as JSON "would throw on every successful write" (`src/ecamm-api/ecamm-http.ts`, and its API notes: "They do not return anything but `Done`"). If that is what Ecamm sends, #8 as written reports every command as an unknown outcome *after applying it*. `isAcknowledgement` now accepts the two documented words bare, as a JSON string, or as a one-element array, and the error includes the first 80 characters of an unrecognized body. Which form real Ecamm sends is still unobserved by this project.
+- Endpoint renames (`setAddMarker`, `setClickPause`), the `systemaudio` and `sharing` aliases, and `ecamm_set_overlay_text` read correctly against the cited sources and are kept unchanged.
+- The read-only boundary test is good and caught a real design problem in #7: one tool that was sometimes read-only and sometimes not. Fixed by splitting it (below).
+- The `ECAMM_MCP_ENTRY` fix matters more than it looks. Before it, "passes against the shipped bundle" was not true, including where earlier PR descriptions from this side said so.
+- Smaller points, not changed here: setup now preserves every saved env key, which would also preserve a stale fixed `ECAMM_HOST`; the simulator shows `Pause` / `Resume` when idle, where a real idle Ecamm was observed to show `None`; `ecamm_set_overlay_text` cannot clear text (min length 1), which may or may not match Ecamm.
+
+### Section A, scene sheet: done
+
+- Two tools. `ecamm_scene_sheet` is read-only and changes nothing. `ecamm_refresh_scene_sheet` is show-tier and is the explicit request to switch scenes; its description names what else sees that (virtual camera, Zoom, second display, scene-triggered media).
+- `onAirState` has an `unknown` value. A missing or unrecognized label is never idle. Known idle labels: `New`, `Record`, `Go Live` (the last from Ecamm's Stream Deck guide, not observed).
+- Refresh is refused on on-air, busy and unknown states, and when the scene on screen cannot be identified. Current scene and state are re-checked before every step and before restoring.
+- If someone else changes the scene, or a broadcast starts, the walk stops and does **not** restore. Reported as `stoppedEarly` with `returnToStartingScene: skipped`.
+- Restoration is verified by reading the scene back: `verified`, `failed` or `skipped`.
+- Per-scene freshness is what was observed: `on-screen`, `refreshed` (a redraw was seen), `visited` (shown, no redraw seen), `stored`.
+- Numbered labels and a matching text index, because the built-in picture font is ASCII. Limits: 40 scenes drawn, 16 visited, oversized thumbnails skipped.
+- Not done: Unicode glyphs in the picture itself.
+
+### Section B, intent and ordering: done
+
+- `ecamm_start_stop` takes `intent`: `go_live`, `record` or `end`. Without one it never clicks, even with `confirm: true`, and answers with the current label and state. That is the migration path for old callers: a safe refusal with instructions.
+- `planMainButton` decides from intent and label. Repeated `go_live` while on air is a no-op. `go_live` is refused in Record Only mode and `record` in broadcast mode. Busy, the end-of-broadcast `OK`, and unknown labels are never clicked.
+- `verifyTransition` watches for the expected state, not for "no longer Wait". Outcomes: `verified`, `failed` (went to Wait and came back), `unknown` (no change after a 10 s grace, or timeout). Handles a label that holds before Wait appears.
+- `ecamm_recording` gains `pause` and `resume` by intent; `pause_resume` stays as the legacy toggle.
+- One mutation queue, `EcammClient.exclusive`, taken at the tool boundary in `wrap` for every non-read tier, so the whole read / decide / change / verify runs alone. Not taken inside client methods, so it cannot nest. A waiter that times out sends nothing and does not let later requests pass the one it was waiting on. Reads are not queued.
+- `info()` sends are single-file and at least 2 s apart regardless of cache clears; the registration request in `ensureReady` counts. `fresh` means "sent after the caller asked".
+- Regression tests cover: simultaneous duplicate mutes, an overlay change queued behind a scene change, a late transition, a start that fails, a timeout after the command was applied, a failed command not blocking later ones, reads not blocked by a long change, and both acknowledgement shapes.
+- Known gap: English labels only. A localized Ecamm will have go live, end and refresh refused until its labels are captured.
+- Not done from B: consolidating discovery with getInfo beyond the pacing above.
+
+### Validation on this branch
+
+- `npm run build`: passed. `npm test`: **136 passed**. `npm run package`: passed. `ECAMM_MCP_ENTRY=release/ecamm-mcp.cjs npx vitest run test/e2e.test.ts`: **44 passed**, now really against the bundle.
+- Version left at 0.2.3. No tag, no release.
+
+### Real-Ecamm checks still owed (Guy, with a test build)
+
+1. What does a set command's raw body look like? One command settles the acknowledgement question.
+2. Marker in a Record Only recording: does `setAddMarker` write the marker file?
+3. `pause` then `resume` in Record Only: button labels before and after.
+4. Overlay text on a disposable overlay, including a non-ASCII name.
+5. `go_live` twice on an unlisted broadcast: second one must not end it. Then `end`.
+6. `record` while in broadcast mode, and `go_live` in Record Only: both must refuse.
+7. Scene sheet, then refresh: pictures current, return verified.
+
+### Next
+
+- C (honest preflight) and D (cues) are not started. D should be built on `exclusive` and `planMainButton`.
+- Merge order if taken separately: #8, then #7, then this. Or this alone, since it contains both. #6 is contained in #7.
+
 ## Start here
 
 Guy wants an Ecamm MCP that impresses the Ecamm community through useful scene automation and dependable operation. This is a shared engineering handoff, not a claim that the roadmap is complete.
