@@ -46,6 +46,8 @@ Three native `shortcuts run` tests with temporary synthetic file paths each pers
 
 Do not describe this as a successful end-to-end Ecamm completion test. The runner-exit issue remains open. The Shortcut is unassigned and clearly named Setup Pending. No recording or broadcast was started for these checks.
 
+A further isolation check temporarily replaced the action with only `printf '%s\n' 'ecamm-runner-diagnostic'`. The native CLI still timed out after 20 seconds with no output file, without invoking Node, the MCP, or media capture. The original recording action was restored and read back in the editor. This points to a broader native runner/output issue; it does not establish its cause. The local report is `.local/shortcut-minimal-runner-test.json`. Avoid changing recording code solely to work around this hang.
+
 ## Next useful work
 
 1. Diagnose the native Shortcut runner's incomplete return before connecting it to an Ecamm event. Do not add a permanent background service as a workaround without a clear reason.
