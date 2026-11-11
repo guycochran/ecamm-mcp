@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { EcammClient, flatten, normalizeImage, preflight, resolveItem, scalar, summarizeInfo } from '../src/client.js'
+import { EcammClient, flatten, normalizeImage, onAirState, preflight, resolveItem, scalar, summarizeInfo } from '../src/client.js'
 import { chooseInstance, parseLsofPorts } from '../src/discovery.js'
 import { buildQuery } from '../src/http.js'
 import { startFake } from './fake-ecamm.js'
@@ -272,7 +272,7 @@ describe('preflight', () => {
   it('flags silence, missing destination, preview mode and an existing broadcast', () => {
     const r = preflight({
       ...base,
-      info: { ...base.info, ButtonLabel: 'End Broadcast', Mute: 'yes', MUTE_MIC: 'yes', PreviewMode: 'yes' },
+      info: { ...base.info, ButtonLabel: 'Finish', Mute: 'yes', MUTE_MIC: 'yes', PreviewMode: 'yes' },
       destinations: [],
     })
     expect(r.ready).toBe(false)
@@ -280,5 +280,16 @@ describe('preflight', () => {
   })
   it('flags a mic at zero', () => {
     expect(warned(preflight({ ...base, info: { ...base.info, VOLUME_MIC: '0' } }))).toEqual(['Mic'])
+  })
+})
+
+describe('onAirState', () => {
+  it('reads the labels real Ecamm shows', () => {
+    expect(onAirState('New')).toBe('idle')
+    expect(onAirState('Record')).toBe('idle')
+    expect(onAirState('Finish')).toBe('on-air')
+    expect(onAirState('Wait')).toBe('busy')
+    expect(onAirState('OK')).toBe('ended')
+    expect(onAirState(['Finish'])).toBe('on-air')
   })
 })

@@ -106,6 +106,20 @@ export function summarizeInfo(info: Record<string, unknown>) {
   return { general, mainMuted: yes(info.Mute), audio, zoom: Object.keys(zoom).length ? zoom : undefined }
 }
 
+export type OnAirState = 'idle' | 'on-air' | 'busy' | 'ended'
+
+/**
+ * Ecamm has no "am I live" flag, only the main button's label. Seen on real Ecamm:
+ * New / Record (idle), Finish (live or recording), Wait (starting or ending), OK (ended, summary showing).
+ */
+export function onAirState(buttonLabel: unknown): OnAirState {
+  const b = scalar(buttonLabel).trim()
+  if (/^wait/i.test(b)) return 'busy'
+  if (/^ok$/i.test(b)) return 'ended'
+  if (/\b(end|stop|finish)\b/i.test(b)) return 'on-air'
+  return 'idle'
+}
+
 export interface PreflightCheck {
   check: string
   status: 'ok' | 'warn' | 'info'
@@ -131,10 +145,11 @@ export function preflight(input: PreflightInput): { ready: boolean; summary: str
   const add = (check: string, status: PreflightCheck['status'], detail: string) => checks.push({ check, status, detail })
 
   const button = scalar(info.ButtonLabel).trim()
-  const onAir = /\b(end|stop|finish)\b/i.test(button)
-  add('On-air state', onAir ? 'warn' : 'ok', onAir
-    ? `Main button reads "${button}", so a broadcast or recording is already running.`
-    : `Idle. Main button reads "${button || 'unknown'}".`)
+  const state = onAirState(button)
+  if (state === 'on-air') add('On-air state', 'warn', `Main button reads "${button}", so a broadcast or recording is already running.`)
+  else if (state === 'busy') add('On-air state', 'warn', `Main button reads "${button}". Ecamm is in the middle of starting or ending a broadcast.`)
+  else if (state === 'ended') add('On-air state', 'warn', `Main button reads "${button}". The last broadcast ended and Ecamm is waiting for you to dismiss its summary.`)
+  else add('On-air state', 'ok', `Idle. Main button reads "${button || 'unknown'}".`)
 
   add('Scene', input.sceneTitle ? 'ok' : 'warn', input.sceneTitle
     ? `Starting on "${input.sceneTitle}"${input.sourceMode ? ` (source: ${input.sourceMode})` : ''}.`
@@ -394,6 +409,18 @@ export class EcammClient {
     }
     if (!raw.trim()) return undefined
     return normalizeImage(raw)
+  }
+
+  /** After Go Live or Finish the button reads "Wait" for up to ~20 s. Poll until it settles. */
+  async settleMainButton(timeoutMs = 45000): Promise<{ label: string; state: OnAirState; settled: boolean }> {
+    const deadline = Date.now() + timeoutMs
+    let label = ''
+    for (;;) {
+      label = scalar((await this.info(true)).ButtonLabel).trim()
+      const state = onAirState(label)
+      if (state !== 'busy') return { label, state, settled: true }
+      if (Date.now() >= deadline) return { label, state, settled: false }
+    }
   }
 
   /** setMode lands a beat after it returns "Done", so poll until getCurrentMode agrees. */

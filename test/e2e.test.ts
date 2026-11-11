@@ -44,7 +44,7 @@ describe('ecamm-mcp end to end', () => {
     const r = await call('ecamm_status')
     expect(r.isError).toBeFalsy()
     expect(r.json.currentScene.title).toBe('Me (full)')
-    expect(r.json.general.ButtonLabel).toBe('Go Live')
+    expect(r.json.general.ButtonLabel).toBe('New')
     expect(r.json.audio.mic.volume).toBe('100')
     const h = state.log[0].headers
     expect(h['ecammlive-uuid']).toMatch(/[0-9A-F-]{36}/)
@@ -100,13 +100,13 @@ describe('ecamm-mcp end to end', () => {
 
   it('go live is a dry run without confirm', async () => {
     const r = await call('ecamm_start_stop', { destination: 'youtube' })
-    expect(r.json).toMatchObject({ dryRun: true, wouldDo: 'Click "Go Live"', destination: 'OHG YouTube' })
+    expect(r.json).toMatchObject({ dryRun: true, wouldDo: 'Click "New"', destination: 'OHG YouTube' })
     expect(state.live).toBe(false)
     const ok = await call('ecamm_start_stop', { destination: 'youtube', title: 'Office Hours', confirm: true })
-    expect(ok.json).toMatchObject({ clicked: 'Go Live', buttonNowSays: 'End Broadcast' })
+    expect(ok.json).toMatchObject({ clicked: 'New', buttonNowSays: 'Finish', state: 'on-air', confirmed: true })
     const sent = state.log.find((l) => l.path === 'setClickButton')!
     expect(sent.query).toMatchObject({ channel: 'CH-YT', title: 'Office Hours' })
-  })
+  }, 20000)
 
   it('encodes spaces as %20 (Ecamm does not decode +)', async () => {
     await call('ecamm_post_comment', { text: 'hello office hours', confirm: true })

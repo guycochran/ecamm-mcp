@@ -6,6 +6,7 @@ import { createServer, type IncomingMessage, type Server } from 'node:http'
  * toggle-only commands, a ~400 ms scene switch, and the Not Found -> Pending -> Allowed flow.
  */
 export interface FakeState {
+  busyUntil?: number
   mode?: string
   permission: 'Not Found' | 'Pending' | 'Allowed' | 'Denied'
   autoApprove: boolean
@@ -75,7 +76,7 @@ export function startFake(): Promise<{ server: Server; port: number; state: Fake
     switch (path) {
       case 'getInfo':
         return json({
-          ButtonLabel: state.live ? 'End Broadcast' : 'Go Live',
+          ButtonLabel: state.busyUntil && Date.now() < state.busyUntil ? 'Wait' : state.live ? 'Finish' : 'New',
           PauseButtonLabel: 'None',
           CurrentScene: state.scene,
           Viewers: state.live ? '12' : '0',
@@ -104,7 +105,7 @@ export function startFake(): Promise<{ server: Server; port: number; state: Fake
       case 'getChannels': return json({ items: [{ title: 'OHG YouTube', UUID: 'CH-YT' }] })
       case 'getProfileList': return json({ items: [{ title: 'Default Show', UUID: 'P-1' }] })
       case 'getVideoList': return json({ items: [{ title: '-No recent items-', UUID: '' }] })
-      case 'setClickButton': state.live = !state.live; return done()
+      case 'setClickButton': state.live = !state.live; state.busyUntil = Date.now() + 2500; return done()
       case 'setComment': state.comments.push(q.text); return done()
       case 'setMarker': state.markers.push(q.text ?? ''); return done()
       case 'getSceneImage': return json({ icon: 'data:image/jpeg;base64,' + Buffer.from([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3, 4, 5, 6, 7]).toString('base64').replace(/(.{4})/g, '$1\r\n') })

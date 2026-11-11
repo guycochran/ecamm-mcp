@@ -365,7 +365,7 @@ export function registerTools(server: McpServer, client: EcammClient, opts: { re
     'ecamm_start_stop',
     {
       description:
-        'Click the main Go Live / Record / End button. This STARTS OR ENDS a live broadcast or recording, depending on its current label. Optional destination (from ecamm_list destinations) and title/description for a new broadcast. Requires confirm: true.',
+        'Click the main Go Live / Record / End button. This STARTS OR ENDS a live broadcast or recording, depending on its current label. Waits until Ecamm finishes starting or ending and reports the resulting state (on-air, idle, ended). Optional destination (from ecamm_list destinations) and title/description for a new broadcast. Requires confirm: true.',
       inputSchema: {
         destination: z.string().optional(),
         title: z.string().optional(),
@@ -381,8 +381,15 @@ export function registerTools(server: McpServer, client: EcammClient, opts: { re
         return dryRun(`Click "${before.ButtonLabel}"`, { destination: dest?.title ?? '(scheduled/default)', title: a.title })
       }
       await client.set('setClickButton', { channel: dest?.id, title: a.title, desc: a.description })
-      const after = await client.info(true)
-      return text({ clicked: before.ButtonLabel, buttonNowSays: after.ButtonLabel, viewers: after.Viewers })
+      const after = await client.settleMainButton()
+      return text({
+        clicked: before.ButtonLabel,
+        buttonNowSays: after.label,
+        state: after.state,
+        confirmed: after.settled,
+        ...(after.settled ? {} : { note: 'Ecamm still says "Wait". Check ecamm_status in a few seconds.' }),
+        ...(after.state === 'ended' ? { note: 'Broadcast ended. Ecamm is showing its summary; click OK there to finish up.' } : {}),
+      })
     }),
   )
 
