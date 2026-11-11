@@ -19,6 +19,8 @@ Primary records: [real-device sessions and earlier builds](CLAUDE_HANDOFF.md), [
 
 ## All registered tools
 
+Candidate packaging follow-up: commit `fcc52bb` (0.3.0, unreleased) passed TypeScript build, **233 source tests in 13 files**, **71 packaged tests in 5 files**, and actual extension-archive verification on this Intel Mac. The nine additional tests cover checksum failures, preserving an existing installation, release-tag pinning, and refusing uploads to a published release. SHA-256 verification of the local bundle and archive also passed. These are local/automated results, not additional real-Ecamm acceptance tests. Later documentation-only edits do not expand the device evidence below.
+
 | Tool | Evidence | Scope and remaining check |
 | --- | --- | --- |
 | `ecamm_status` | Device | Real connection/status reads; button labels are observations, not an independent live/recording signal. |

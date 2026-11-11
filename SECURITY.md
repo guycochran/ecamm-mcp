@@ -40,6 +40,6 @@ Only the latest release gets fixes.
 
 - An AI assistant decides when to call these tools. The confirmation guard and read-only mode reduce the risk of an unwanted action; they do not remove it. Don't rely on this during a show you can't afford to have interrupted.
 - The Terminal install pipes a script into your shell. Read [install.sh](install.sh) first if that concerns you, or use the extension.
-- Release files come with `SHA256SUMS.txt`. A checksum shows a download matches the release. It is not a code signature, and the extension is not notarized by Apple.
+- Releases from 0.3.0 onward include `SHA256SUMS.txt`. A checksum shows a download matches the release. It is not a code signature, and the extension is not notarized by Apple.
 - The optional recording Shortcut runs a shell script on your Mac. Set it up only if you understand what it runs.
 - Ecamm Live is Mac-only. Any "Ecamm for Windows" repository is not this project and is not from Ecamm.

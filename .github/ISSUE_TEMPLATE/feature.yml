@@ -6,7 +6,7 @@ body:
     attributes:
       value: |
         Community project, best effort. Not affiliated with Ecamm.
-        ecamm-mcp can only do what Ecamm's Remote Control API offers. Today that API cannot read live chat, send events, create or edit scenes, report for certain that you are live, or return the recording file's path. You can still ask for those: such requests get the `upstream-ecamm` label and stay on record, but nothing in this project can deliver them.
+        Describe the workflow you need, even if it is not supported today. Requests that need additional Ecamm HTTP API support can be tracked with `upstream-ecamm`. The README distinguishes HTTP limitations from the experimental macOS Shortcuts route.
   - type: textarea
     id: want
     attributes:
@@ -31,7 +31,7 @@ body:
         If you can't get either (for example the install itself failed), paste the exact error message and say at which step it appeared.
       render: text
     validations:
-      required: true
+      required: false
   - type: input
     id: ecamm
     attributes:

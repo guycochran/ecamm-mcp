@@ -105,7 +105,7 @@ else
   curl -fsSL "$RELEASE_BASE/ecamm-mcp.cjs" -o "$NEW" ||
     die "Could not download ecamm-mcp from GitHub. Check your internet connection and try again."
   curl -fsSL "$RELEASE_BASE/SHA256SUMS.txt" -o "$TMP/SHA256SUMS.txt" ||
-    die "Could not obtain release checksums. Nothing installed. Older releases may lack checksums; use their desktop extension or retry after a checksummed release is published."
+    die "Could not obtain release checksums. Server not installed or replaced. Older releases may lack checksums; use their desktop extension or retry after a checksummed release is published."
   want="$(awk '$2 == "ecamm-mcp.cjs" || $2 == "*ecamm-mcp.cjs" {print $1}' "$TMP/SHA256SUMS.txt")"
   [[ "$want" =~ ^[0-9a-fA-F]{64}$ ]] || die "The release must contain exactly one valid checksum for ecamm-mcp.cjs. Not installing."
   got="$(sha256 "$NEW")"
