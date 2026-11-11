@@ -27,6 +27,25 @@ Interpretation, from this one session: marker times count recorded time, so a pa
 Code: `markersPastEnd`; the handoff receipt now reports marker times later than the file is long and applies no correction. Limitation text updated. 188 tests pass.
 
 Still owed: ffprobe install and folder settings on the Mac, the Shortcut and its completion events (including what a split produces), separate tracks, guest controls.
+## Codex integration review after Claude's completed pass
+
+Merged Claude's completed PR #9 head `0b151e94a298c50d58157ec1d0e69ee212790edd` into `codex/ecamm-recording-workflows`, preserving the later real-media and extension-archive work. This is integration on the review branch, not a merge to main or a release.
+
+Regression tests exposed and fixed these issues:
+
+- A text update can rename a plain-text overlay. Cue execution now retains the resolved overlay ID for subsequent uses of the original reference, and refuses to retarget a different object if that overlay disappears. Plans defer references after a text change, allowing the new name to resolve at runtime.
+- A blank volume response no longer verifies a requested level of zero.
+- Cues cannot start when the current scene is unknown.
+- Missing/N/A mute state cannot trigger a toggle. Unreadable post-request state is an unknown outcome, not a successful unmute.
+- Missing overlay visibility is preserved rather than converted to hidden. An overlay disappearing during readback cannot verify a hide request.
+- Explicit `N/A` (not just absent fields) stays unknown in status/preflight for mute, level, Preview Mode, and overlay visibility.
+- Cue tool wording now explains that references after a scene/text change are validated when reached and earlier steps may already have run if such a reference is missing.
+
+These are automated regression fixes; the new combined cue behavior has not yet been exercised against real Ecamm. Claude's real-device observations below remain attributed to its earlier builds.
+
+Validation: the combined source suite passed **204 tests in 9 files**, including actual generated-media checks. The packaged integration/media suites passed **65 tests in 4 files**; after the final N/A normalization, the packaged preflight regression also passed. The desktop archive verifier passed with **36 tools**, optional settings, the completion helper, and receipt listing. These checks use simulated Ecamm responses and generated media, not live Ecamm control.
+
+Remaining cue limitations: no cancellation tool or saved named cues yet; scene-local references after a scene/text change may only be resolved during execution. A failed later step does not undo already completed steps. Keep those limits clear in demos.
 
 ## Claude update 2, November 10, 2026 (about 11 PM Pacific)
 
@@ -182,6 +201,10 @@ Guy wants an Ecamm MCP that impresses the Ecamm community through useful scene a
 ## Completed in this branch
 
 ### Recording workflow follow-up (local branch `codex/ecamm-recording-workflows`)
+
+Packaging follow-up: all seven jobs for commit `924587a` passed in [GitHub CI](https://github.com/guycochran/ecamm-mcp/actions/runs/42974995651), including Linux real-media tests and Intel/Apple Silicon installer checks. Added `node scripts/verify-extension.mjs` to exercise the actual `.mcpb` archive (not merely the loose bundle): extraction, CommonJS packaging under an ESM parent, exact version match, manifest entry point, tool discovery, optional-setting placeholders, completion helper, and inbox listing. Local archive smoke check passed with 33 tools. This check is now included in both macOS/Linux test jobs. It does not open Claude desktop or contact Ecamm. Claude is currently completing preflight/cue work, so those files remain untouched by this follow-up.
+
+Media-validation follow-up: Codex is leaving preflight coding to Claude (confirmed by Guy's current Claude status) and has added [actual-media regression coverage](REAL_MEDIA_VALIDATION.md) independently. Real ffprobe exposed a successful-exit/empty-metadata case for truncated MP4; inspection now reports `incomplete_metadata`. Full suite with generated-media tests: **175 passed**; final packaged real-media suite: **7 passed**, including an actual H.265 MCP tool call. The five packaged workflow integration checks also passed. CI now includes a real-media job and packaged recording/preparation checks. Actual Ecamm production and completion Shortcut behavior remain untested here. Temporary test tools were not installed globally or configured for the user's MCP.
 
 Latest follow-up: [Claude finish checklist](CLAUDE_FINISH_CHECKLIST.md) gives the integration order, actual Ecamm rehearsal, completion-event checks, and remaining coding priorities. Added `ecamm_recording_status` / `recording-doctor`, excluded attached cover art from video detection, detected duplicate hard-linked assets, and ensured failed inbox writes clean up temporary files. Full combined suite: **169 passed**. Targeted recording/workflow suite: **32 passed**. Packaged new workflow integration: **5 passed**. Build and packaging passed. CLI help lists the helper commands. Actual ffprobe/Ecamm media validation remains pending.
 

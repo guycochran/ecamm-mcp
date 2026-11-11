@@ -527,7 +527,7 @@ export function registerTools(server: McpServer, client: EcammClient, opts: { re
       description:
         'Run a cue: up to 12 ordinary preparation steps in order (switch scene, show or hide an overlay, change an overlay\'s text, mute or unmute, set a level, wait up to 30 s each and 60 s in total). ' +
         'Example: "use Guest Split, change the guest lower third to Renée, show it, set music to 15". ' +
-        'Everything is checked first; if any step refers to something missing, nothing runs. It then runs the steps one at a time, with no other change from this server in between, ' +
+        'References available in the current scene are checked first. Overlay references after a scene or text change are checked when reached; earlier steps may already have run if one is missing. It runs steps one at a time, with no other change from this server in between, ' +
         'stops at the first step that fails, and stops without doing more if someone else changes the scene. Each step reports verified, accepted, failed or not_run. Nothing is rolled back. ' +
         'It runs whether or not Ecamm is live, exactly as the individual tools do, so while live the audience sees each step. It cannot go live, record, end, post comments, switch profiles or control Zoom; ask for those separately. ' +
         'Timing is approximate. Use a button for a cut that has to land on a beat.',

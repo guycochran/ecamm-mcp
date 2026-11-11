@@ -33,6 +33,10 @@ export function scalar(payload: unknown): string {
 }
 
 export const yes = (v: unknown) => scalar(v).trim().toLowerCase() === 'yes'
+export const knownBoolean = (v: unknown): boolean | undefined => {
+  const value = scalar(v).trim().toLowerCase()
+  return value === 'yes' ? true : value === 'no' ? false : undefined
+}
 
 function itemsOf(payload: unknown): Record<string, unknown>[] {
   if (Array.isArray(payload)) return payload as Record<string, unknown>[]
@@ -101,12 +105,15 @@ export function summarizeInfo(info: Record<string, unknown>) {
     if (m) {
       const bus = m[2].toLowerCase()
       audio[bus] ??= {}
-      if (m[1] === 'VOLUME') audio[bus].volume = String(v)
-      else audio[bus].muted = yes(v)
+      if (m[1] === 'VOLUME') {
+        const raw = scalar(v).trim()
+        const level = raw ? Number(raw) : NaN
+        if (Number.isFinite(level) && level >= 0 && level <= 100) audio[bus].volume = raw
+      } else audio[bus].muted = knownBoolean(v)
     } else if (k.startsWith('Zoom')) zoom[k] = v
     else general[k] = v
   }
-  return { general, mainMuted: yes(info.Mute), audio, zoom: Object.keys(zoom).length ? zoom : undefined }
+  return { general, mainMuted: knownBoolean(info.Mute), audio, zoom: Object.keys(zoom).length ? zoom : undefined }
 }
 
 export type OnAirState = 'idle' | 'on-air' | 'busy' | 'ended' | 'unknown'
@@ -237,7 +244,6 @@ export function preflight(input: PreflightInput): PreflightResult {
   const { audio } = summarizeInfo(info)
   const checks: PreflightCheck[] = []
   const add = (check: string, status: PreflightCheck['status'], detail: string) => checks.push({ check, status, detail })
-  const reported = (key: string) => scalar(info[key]).trim() !== ''
 
   const button = scalar(info.ButtonLabel).trim()
   const state = onAirState(button)
@@ -255,13 +261,14 @@ export function preflight(input: PreflightInput): PreflightResult {
   if (input.sceneTitle) add('Scene', 'ok', `On "${input.sceneTitle}"${input.sourceMode ? ` (source: ${input.sourceMode})` : ''}.`)
   else add('Scene', 'unknown', 'Could not read the current scene.')
 
-  if (!reported('Mute')) add('Main output', 'unknown', 'Ecamm did not report whether the main output is muted.')
+  if (knownBoolean(info.Mute) === undefined) add('Main output', 'unknown', 'Ecamm did not report a recognized main-output mute state.')
   else if (yes(info.Mute)) add('Main output', 'warn', 'Main output is muted in Ecamm.')
   else add('Main output', 'ok', 'Main output is not muted.')
 
   const mic = audio.mic
   if (!mic || mic.muted === undefined) add('Mic', 'unknown', 'Ecamm did not report a mute state for the mic.')
   else if (mic.muted) add('Mic', 'warn', 'Mic is muted in Ecamm.')
+  else if (mic.volume === undefined) add('Mic', 'unknown', 'Mic is not muted, but its level setting is unavailable.')
   else if (mic.volume !== undefined && Number(mic.volume) === 0) add('Mic', 'warn', 'Mic level is set to 0.')
   else add('Mic', 'ok', `Mic is not muted${mic.volume !== undefined ? `, level ${mic.volume}` : ''}. This is a setting; it does not show that sound is arriving.`)
 
@@ -276,7 +283,7 @@ export function preflight(input: PreflightInput): PreflightResult {
   else if (!input.destinations.length) add('Destinations', intent === 'go_live' ? 'warn' : 'info', 'No streaming destinations are set up in Ecamm.')
   else add('Destinations', intent === 'go_live' ? 'ok' : 'info', `Set up: ${input.destinations.map((d) => d.title).join(', ')}. This does not show which one is selected or test the connection.`)
 
-  if (!reported('PreviewMode')) add('Preview mode', 'unknown', 'Ecamm did not report Preview Mode.')
+  if (knownBoolean(info.PreviewMode) === undefined) add('Preview mode', 'unknown', 'Ecamm did not report a recognized Preview Mode state.')
   else if (yes(info.PreviewMode)) add('Preview mode', 'warn', 'Preview Mode is on. Scene changes will not reach viewers until published.')
   if (yes(info.LiveDemo)) add('Live demo', 'warn', 'Live Demo mode is on.')
   if (yes(info.HidingUI)) add('On-screen controls', 'info', 'Ecamm UI controls are hidden.')
@@ -284,7 +291,9 @@ export function preflight(input: PreflightInput): PreflightResult {
   if (!input.overlays) add('Overlays', 'unknown', 'The overlay list could not be read.')
   else {
     const visible = input.overlays.filter((o) => o.visible === true).map((o) => o.title)
-    add('Overlays', 'info', visible.length ? `Showing now: ${visible.join(', ')}.` : 'No overlays showing in this scene.')
+    const unknown = input.overlays.filter(o => typeof o.visible !== 'boolean')
+    if (unknown.length) add('Overlays', 'unknown', `Visibility unavailable for: ${unknown.map(o => o.title).join(', ')}.${visible.length ? ` Confirmed showing: ${visible.join(', ')}.` : ''}`)
+    else add('Overlays', 'info', visible.length ? `Showing now: ${visible.join(', ')}.` : 'No overlays showing in this scene.')
   }
 
   const names = (status: PreflightCheck['status']) => checks.filter((c) => c.status === status).map((c) => c.check)
@@ -521,7 +530,7 @@ export class EcammClient {
 
   // ---- lists ----
   scenes = async () => flatten(await this.get('getSceneList'), (r) => ({ locked: r.Locked === true }))
-  overlays = async () => flatten(await this.get('getOverlayList'), (r) => ({ visible: r.Visible === true }))
+  overlays = async () => flatten(await this.get('getOverlayList'), (r) => ({ visible: typeof r.Visible === 'boolean' ? r.Visible : undefined }))
   cameras = async () => flatten(await this.get('getInputs'))
   videos = async () => flatten(await this.get('getVideoList'))
   sounds = async () =>
@@ -562,9 +571,13 @@ export class EcammClient {
   /** Mute is a toggle in Ecamm. Read, toggle only if needed, read back. */
   async setMuted(bus: AudioBus | undefined, muted: boolean): Promise<{ before: boolean; after: boolean }> {
     const params = bus ? { bus: apiAudioBus(bus) } : undefined
-    const before = yes(await this.get('getMute', params))
+    const initial = scalar(await this.get('getMute', params)).trim().toLowerCase()
+    if (initial !== 'yes' && initial !== 'no') throw new EcammError('Mute state is unknown; no toggle was sent.', 'blocked')
+    const before = initial === 'yes'
     if (before !== muted) await this.set('setMute', params)
-    const after = yes(await this.http.get('getMute', params))
+    const returned = scalar(await this.http.get('getMute', params)).trim().toLowerCase()
+    if (returned !== 'yes' && returned !== 'no') throw new EcammError('Mute outcome is unknown after the request. Check Ecamm before retrying.', 'parse')
+    const after = returned === 'yes'
     return { before, after }
   }
 
@@ -573,13 +586,16 @@ export class EcammClient {
     const list = await this.overlays()
     const ov = list.find((o) => o.id === id)
     if (!ov) throw new EcammError(`Overlay ${id} is not in the current scene`, 'not_found')
-    const before = ov.visible === true
+    if (typeof ov.visible !== 'boolean') throw new EcammError('Overlay visibility is unknown; no toggle was sent.', 'blocked')
+    const before = ov.visible
     if (visible === 'toggle' || before !== visible) await this.set('setOverlay', { id })
     let after: boolean | undefined
     const target = visible === 'toggle' ? !before : visible
     const deadline = Date.now() + 1500
     while (Date.now() < deadline) {
-      after = (await this.overlays()).find((o) => o.id === id)?.visible === true
+      const observed = (await this.overlays()).find((o) => o.id === id)?.visible
+      after = typeof observed === 'boolean' ? observed : undefined
+      if (after === undefined) break
       if (after === target) break
       await sleep(100)
     }

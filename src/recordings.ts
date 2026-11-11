@@ -142,16 +142,19 @@ export async function inspectRecording(path: string, opts: RecordingOptions, pro
   const changed = before.size !== after.size || before.mtimeMs !== after.mtimeMs || before.ino !== after.ino || before.dev !== after.dev
   const rawDuration = Number(media.format?.duration)
   const durationSeconds = Number.isFinite(rawDuration) && rawDuration > 0 ? rawDuration : undefined
+  const hasVideo = media.streams.some(s => s.codec_type === 'video' && s.disposition?.attached_pic !== 1)
+  const hasAudio = media.streams.some(s => s.codec_type === 'audio')
+  const incomplete = !durationSeconds || (!hasVideo && !hasAudio)
   return {
     path: canonical, inspectedAt: new Date().toISOString(), bytes: after.size,
-    identity: identityOf(after), status: changed ? 'changing' as const : 'metadata_read' as const,
+    identity: identityOf(after), status: changed ? 'changing' as const : incomplete ? 'incomplete_metadata' as const : 'metadata_read' as const,
     durationSeconds, format: media.format?.format_name,
     streams: media.streams,
-    hasVideo: media.streams.some(s => s.codec_type === 'video' && s.disposition?.attached_pic !== 1),
-    hasAudio: media.streams.some(s => s.codec_type === 'audio'),
+    hasVideo, hasAudio,
     limitations: [
       'Metadata inspection does not prove complete decoding, finalization, synchronization, or audible speech.',
       ...(changed ? ['The file changed during inspection; inspect it again after recording finishes.'] : []),
+      ...(incomplete ? ['The inspector returned no positive duration or no audio/video tracks. The file may be incomplete or unsupported; it has not passed metadata checks.'] : []),
     ],
   }
 }

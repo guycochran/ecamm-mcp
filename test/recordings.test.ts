@@ -117,7 +117,9 @@ describe('inspection and edit receipts', () => {
   })
   it('does not turn a missing or invalid duration into a successful check', async () => {
     for (const duration of ['N/A', '-1', '0', 'Infinity']) {
-      expect((await inspectRecording(movie, opts, async () => ({ format: { duration } }))).durationSeconds).toBeUndefined()
+      const result = await inspectRecording(movie, opts, async () => ({ format: { duration } }))
+      expect(result.durationSeconds).toBeUndefined()
+      expect(result.status).toBe('incomplete_metadata')
     }
   })
   it('flags missing, mismatched, duplicate and unreadable expected assets', async () => {

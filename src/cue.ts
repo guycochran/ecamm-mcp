@@ -58,6 +58,7 @@ export async function planCue(client: EcammClient, steps: CueStep[]): Promise<Cu
   const [scenes, currentId] = await Promise.all([client.scenes(), client.currentScene()])
   const current = scenes.find((s) => s.id === currentId)
   const problems: string[] = []
+  if (!current) problems.push('The current scene could not be identified. Check Ecamm before running a cue.')
   const totalWait = steps.reduce((n, s) => n + (s.do === 'wait' ? s.seconds : 0), 0)
   if (totalWait > MAX_CUE_WAIT_S) problems.push(`The waits add up to ${totalWait} s; the limit is ${MAX_CUE_WAIT_S} s.`)
 
@@ -65,6 +66,7 @@ export async function planCue(client: EcammClient, steps: CueStep[]): Promise<Cu
   // change cannot be checked until the cue is running.
   let overlaysNow: Item[] | undefined
   let sceneChanged = false
+  let textChanged = false
   const planned: PlannedStep[] = []
   for (const [i, step] of steps.entries()) {
     const p: PlannedStep = { number: i + 1, what: describeStep(step), checked: 'not-needed' }
@@ -74,12 +76,13 @@ export async function planCue(client: EcammClient, steps: CueStep[]): Promise<Cu
         p.checked = 'yes'
         sceneChanged = true
       } else if (step.do === 'overlay' || step.do === 'overlay_text') {
-        if (sceneChanged) p.checked = 'later'
+        if (sceneChanged || textChanged) p.checked = 'later'
         else {
           overlaysNow ??= await client.overlays()
           resolveItem(overlaysNow, step.overlay, 'overlay')
           p.checked = 'yes'
         }
+        if (step.do === 'overlay_text') textChanged = true
       }
     } catch (err) {
       p.problem = err instanceof Error ? err.message : String(err)
@@ -110,6 +113,21 @@ export async function runCue(client: EcammClient, steps: CueStep[]): Promise<{ s
   let expected = await client.currentScene()
   const out: StepOutcome[] = steps.map((s, i) => ({ number: i + 1, what: describeStep(s), outcome: 'not_run' as const }))
   let stopped: string | undefined
+  if (!expected || !scenes.some(s => s.id === expected)) {
+    return { steps: out, completed: 0, stopped: 'The starting scene is unknown; nothing was run.', sceneNow: 'unknown' }
+  }
+  // Plain text overlays can change their list title when text changes. Keep the
+  // already-resolved object identity for subsequent uses of the original reference.
+  const overlayIds = new Map<string, string>()
+  const overlayFor = async (ref: string) => {
+    const key = `${expected}:${ref.trim().toLowerCase()}`
+    const current = await client.overlays()
+    const id = overlayIds.get(key)
+    const overlay = id ? current.find(item => item.id === id) : resolveItem(current, ref, 'overlay')
+    if (!overlay) throw new Error(`The previously selected overlay "${ref}" is no longer in this scene.`)
+    overlayIds.set(key, overlay.id)
+    return overlay
+  }
 
   for (const [i, step] of steps.entries()) {
     const o = out[i]
@@ -127,13 +145,13 @@ export async function runCue(client: EcammClient, steps: CueStep[]): Promise<{ s
         if (await client.switchScene(target.id)) { o.outcome = 'verified'; expected = target.id }
         else { o.outcome = 'failed'; o.detail = 'Ecamm did not switch to that scene.' }
       } else if (step.do === 'overlay') {
-        const ov = resolveItem(await client.overlays(), step.overlay, 'overlay')
+        const ov = await overlayFor(step.overlay)
         const want = step.state === 'show'
         const r = await client.setOverlayVisible(ov.id, want)
         if (r.after === want) o.outcome = 'verified'
-        else { o.outcome = 'failed'; o.detail = `Ecamm still lists "${ov.title}" as ${r.after ? 'showing' : 'hidden'}.` }
+        else { o.outcome = 'failed'; o.detail = r.after === undefined ? `Visibility of "${ov.title}" could not be read back. Check Ecamm before retrying.` : `Ecamm still lists "${ov.title}" as ${r.after ? 'showing' : 'hidden'}.` }
       } else if (step.do === 'overlay_text') {
-        const ov = resolveItem(await client.overlays(), step.overlay, 'overlay')
+        const ov = await overlayFor(step.overlay)
         const verified = await client.setOverlayText(ov.id, step.text)
         o.outcome = verified ? 'verified' : 'accepted'
         if (!verified) o.detail = 'Ecamm accepted the text but does not list the overlay under it. Normal for overlays that keep their own name; check the picture.'
@@ -145,7 +163,8 @@ export async function runCue(client: EcammClient, steps: CueStep[]): Promise<{ s
         const bus = apiAudioBus(step.bus)
         const want = Math.round(step.volume)
         await client.set('setVolume', { bus, volume: want })
-        const after = Number(scalar(await client.get('getVolume', { bus })))
+        const raw = scalar(await client.get('getVolume', { bus })).trim()
+        const after = raw === '' ? NaN : Number(raw)
         if (after === want) o.outcome = 'verified'
         else { o.outcome = 'failed'; o.detail = `Ecamm reports ${step.bus} at ${Number.isFinite(after) ? after : 'an unreadable level'}.` }
       }
