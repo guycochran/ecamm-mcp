@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Question, or help getting set up
+    url: https://github.com/guycochran/ecamm-mcp/discussions
+    about: Ask here first. Issues are for bugs and feature requests.
+  - name: Security problem
+    url: https://github.com/guycochran/ecamm-mcp/security/advisories/new
+    about: Report privately. Please don't open a public issue.
+  - name: A problem with Ecamm Live itself
+    url: https://support.ecamm.com
+    about: This project is not made by Ecamm. Only contact Ecamm about Ecamm Live, never about ecamm-mcp.

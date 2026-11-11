@@ -1,5 +1,8 @@
 # ecamm-mcp
 
+> **Community project, best effort. Not affiliated with Ecamm. No live-show support.**
+> Questions go to [GitHub Discussions](https://github.com/guycochran/ecamm-mcp/discussions), bugs to [Issues](https://github.com/guycochran/ecamm-mcp/issues). Please don't contact Ecamm about this project.
+
 Run **Ecamm Live** from a chat with Claude. Type what you want in plain words and it happens.
 
 "Check my setup before I go live." "Switch to my guest scene." "Show the lower third." "Drop a marker called Q&A."
@@ -8,31 +11,37 @@ It isn't a replacement for your Stream Deck. A button is still the fastest way t
 
 It uses Ecamm's own Remote Control feature, the same one Stream Deck and Companion use, so there is nothing to change in your Ecamm setup. It runs on your Mac and talks to Ecamm Live locally.
 
-Community project. Not made by or affiliated with Ecamm Network.
+**Tested with:** Ecamm Live 4.6.2 on an Intel iMac Pro, with a shorter run on an Apple silicon (M1) Mac. The macOS versions of those two Macs were not recorded; that is an open item, not a claim. Other versions may work and have not been tried.
+
+Ecamm Live is Mac-only. Any "Ecamm for Windows" repo is not this project and is not from Ecamm.
 
 ## Install
 
-You need a Mac with Ecamm Live and the [Claude desktop app](https://claude.ai/download). Pick one of the two ways below. Not both, or Claude will see everything twice.
+You need a Mac with Ecamm Live and the [Claude desktop app](https://claude.ai/download). Use the extension unless you have a reason not to. Don't install both ways, or Claude will see everything twice.
 
-### Option 1: no Terminal
+### The extension (recommended)
 
 1. Download **[ecamm-mcp.mcpb](https://github.com/guycochran/ecamm-mcp/releases/latest/download/ecamm-mcp.mcpb)**.
 2. Double-click it. Claude opens. Click **Install**.
 3. Open Ecamm Live, then ask Claude: **"What's my Ecamm status?"**
 4. Ecamm Live asks for permission. Click **Allow**. Done.
 
-### Option 2: one line in Terminal
+If you change the extension's settings later, quit Claude completely (Cmd+Q) and reopen it. Turning the extension off and on was not enough in our testing.
 
-Open Terminal (press Cmd+Space, type `Terminal`, press Return), paste this, press Return:
+**Checking the download (optional).** Each release includes `SHA256SUMS.txt`. In Terminal, in the folder with the download, run `shasum -a 256 ecamm-mcp.mcpb` and compare the result with the line for that file. A checksum shows the file is the one attached to the release. It is not a code signature.
+
+### Terminal install (secondary)
+
+For people who prefer Terminal or use another MCP app. Open Terminal (press Cmd+Space, type `Terminal`, press Return), paste this, press Return:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/guycochran/ecamm-mcp/main/install.sh | bash
 ```
 
-That one line does everything:
+Piping a script from the internet into your shell means trusting it. You can [read install.sh](install.sh) first. It does this:
 
-1. Uses the Node.js you already have. If you have none, it downloads a private copy into `~/.ecamm-mcp`. No sudo, nothing installed system-wide.
-2. Downloads the server into `~/.ecamm-mcp`.
+1. Uses the Node.js you already have. If you have none, it downloads a private copy into `~/.ecamm-mcp` and checks it against nodejs.org's checksum. No sudo, nothing installed system-wide.
+2. Downloads the server into `~/.ecamm-mcp` and checks it against the release's `SHA256SUMS.txt`. A mismatch stops the install.
 3. Adds Ecamm to Claude desktop. Your existing Claude config is backed up first and nothing else in it is touched.
 4. Opens Ecamm Live if it's closed and gets it to ask for permission. Click **Allow**.
 
@@ -98,8 +107,6 @@ What you need to know:
 - **MCP cancellation stops further scene changes during a refresh.** An in-flight switch may still finish. It does not restore the starting scene after cancellation; check which scene is on screen.
 
 ## The pre-show check
-
-Development branch: [recording and interview workflows](docs/RECORDING_WORKFLOWS.md) add intent-aware preparation and optional recording-file receipts. These are not yet part of the published release; separate-track setup and real-device validation remain manual.
 
 Ask "check my setup before I go live" and you get one answer instead of a wall of settings. It flags the problems Ecamm itself can see:
 
@@ -168,34 +175,50 @@ To set it up again without reinstalling: `~/.ecamm-mcp/ecamm-mcp setup`
 
 To remove the Terminal install: `~/.ecamm-mcp/ecamm-mcp uninstall`, then delete the `~/.ecamm-mcp` folder.
 
-Still stuck? [Open an issue](https://github.com/guycochran/ecamm-mcp/issues).
+Still stuck? Ask in [Discussions](https://github.com/guycochran/ecamm-mcp/discussions). Found a bug? [Open an issue](https://github.com/guycochran/ecamm-mcp/issues/new/choose); the form asks for the doctor output and your Ecamm, macOS and Claude versions. This is a best-effort project: there is no support during a live show, so test before the show, not during it.
 
 ## What it can do
 
-| Tool | Does |
-| --- | --- |
-| `ecamm_preflight` | Pre-show check: the problems Ecamm can see, what it couldn't read, and what it doesn't check |
-| `ecamm_plan_cue`, `ecamm_run_cue` | Check, then run, up to 12 ordinary steps in order. Cannot go live, record, end or post |
-| `ecamm_read_markers` | Read the marker file Ecamm saves beside a recording |
-| `ecamm_browse_recordings` | Browse file candidates in configured recording folders, even before the completion Shortcut is set up |
-| `ecamm_status` | Live or not, current scene, viewers, preview mode, mutes, volumes, Zoom state |
-| `ecamm_list_scenes`, `ecamm_list_overlays`, `ecamm_list` | Scenes, overlays in the current scene, cameras, videos, sounds, audio filters, profiles, destinations |
-| `ecamm_scene_sheet` | One labeled picture of every scene, plus a numbered list, from the thumbnails Ecamm already has. Changes nothing |
-| `ecamm_refresh_scene_sheet` | Same sheet with current pictures: switches through every scene, then returns to where you were and says whether that worked |
-| `ecamm_thumbnail` | Thumbnail of a scene, overlay or video |
-| `ecamm_switch_scene`, `ecamm_step_scene` | Take a scene live by name, or next / previous |
-| `ecamm_set_overlay` | Show, hide or toggle an overlay |
-| `ecamm_set_overlay_text` | Update an existing text overlay while preserving styling; acceptance is reported, rendered text is not verified |
-| `ecamm_set_mute`, `ecamm_set_volume` | Main mute, or any bus: mic, mic2, system audio, interview, zoom, sound effects, movie, guests 1 to 4 |
-| `ecamm_set_camera`, `ecamm_set_source_mode`, `ecamm_play_video` | Camera input, camera / screen / video mode, play a video file |
-| `ecamm_sound`, `ecamm_toggle_audio_filter` | Sound effects and audio filters |
-| `ecamm_toggle` | PiP, Preview Mode, publish preview, hide UI, live demo |
-| `ecamm_comment_overlay`, `ecamm_add_marker` | Show the latest comment on screen, drop a marker |
-| `ecamm_start_stop` | Go live, record, or end, by stated intent (`go_live`, `record`, `end`). Verifies the result. Confirm required |
-| `ecamm_recording` | Pause, resume, or split the recording. Confirm required |
-| `ecamm_post_comment`, `ecamm_set_profile` | Post a public comment, switch Profile (confirm required) |
-| `ecamm_zoom` | Ecamm for Zoom: view controls run directly, meeting controls need confirm |
-| `ecamm_discover` | Find Ecamm Live again, or see which Macs on the network are running it |
+The last column says whether the tool has been run against a real Ecamm Live (4.6.2). **Yes** means seen working at least once. **Partly** means some of it. **Untested** means it passes against a simulator only. None of it is guaranteed.
+
+| Tool | Does | Real Ecamm |
+| --- | --- | --- |
+| `ecamm_status` | Main button label, current scene, viewers, preview mode, mutes, volumes, Zoom state | Yes |
+| `ecamm_preflight` | Pre-show check: the problems Ecamm can see, what it couldn't read, and what it doesn't check | Partly: for a recording. The go-live wording is untested |
+| `ecamm_list_scenes`, `ecamm_list_overlays`, `ecamm_list` | Scenes, overlays in the current scene, cameras, videos, sounds, audio filters, profiles, destinations | Yes |
+| `ecamm_scene_sheet` | One labeled picture of every scene, plus a numbered list, from the thumbnails Ecamm already has. Changes nothing | Yes |
+| `ecamm_refresh_scene_sheet` | Same sheet with current pictures: switches through every scene, then returns to where you were and says whether that worked | Yes |
+| `ecamm_thumbnail` | Thumbnail of a scene, overlay or video | Yes |
+| `ecamm_switch_scene`, `ecamm_step_scene` | Take a scene live by name, or next / previous | Yes |
+| `ecamm_set_overlay` | Show, hide or toggle an overlay | Yes |
+| `ecamm_set_overlay_text` | Update an existing text overlay while preserving styling | Yes, plain text overlays |
+| `ecamm_set_mute`, `ecamm_set_volume` | Main mute, or any bus: mic, mic2, system audio, interview, zoom, sound effects, movie, guests 1 to 4 | Partly: main and mic. System audio, interview, zoom and guest buses are untested |
+| `ecamm_set_camera`, `ecamm_set_source_mode` | Camera input, camera / screen / video mode | Yes |
+| `ecamm_play_video` | Play a video file | Untested |
+| `ecamm_sound` | Sound effects | Yes |
+| `ecamm_toggle_audio_filter` | Audio filters | Untested |
+| `ecamm_toggle` | PiP, Preview Mode, publish preview, hide UI, live demo | Partly: Preview Mode. Once it would not turn back off while Ecamm showed its end summary |
+| `ecamm_comment_overlay` | Show the latest comment on screen | Yes |
+| `ecamm_add_marker` | Drop a marker. Reports that Ecamm accepted it; the API can't confirm it was saved | Yes, seen in Ecamm's marker file |
+| `ecamm_plan_cue`, `ecamm_run_cue` | Check, then run, up to 12 ordinary steps in order. Cannot go live, record, end or post | Partly: scene, overlay, wait and mic level steps. Overlay text in a cue and cancelling are untested |
+| `ecamm_start_stop` | Go live, record, or end, by stated intent (`go_live`, `record`, `end`). Verifies the result. Confirm required | Partly: record and end. Go live worked on 0.2.x; on this version one attempt from the `New` button did not start a broadcast and was reported as unknown |
+| `ecamm_recording` | Pause, resume, or split the recording. Confirm required | Yes |
+| `ecamm_post_comment` | Post a public comment. Confirm required | Yes |
+| `ecamm_set_profile` | Switch Profile. Confirm required | Untested beyond the dry run |
+| `ecamm_zoom` | Ecamm for Zoom: view controls run directly, meeting controls need confirm | Partly: the Zoom panel. Sharing and meeting controls are untested |
+| `ecamm_discover` | Find Ecamm Live again, or see which Macs on the network are running it | Partly: same Mac. Another Mac on the network is untested |
+
+**Recording files (advanced, off until you set a recording folder).** These read files on your Mac and need extra setup: a recording folder, `ffprobe`, and for some a Shortcut. See [recording workflows](docs/RECORDING_WORKFLOWS.md). If you only want to run Ecamm, ignore them.
+
+| Tool | Does | Real Ecamm |
+| --- | --- | --- |
+| `ecamm_recording_status` | Check the recording folder, `ffprobe` and inbox setup | Yes |
+| `ecamm_prepare_session` | Read-only preparation report for a recording, stream or presentation | Untested |
+| `ecamm_browse_recordings` | Browse file candidates in the recording folder | Untested |
+| `ecamm_list_recordings` | List recordings reported by the completion Shortcut | Untested: the Shortcut has not fired from a real recording |
+| `ecamm_inspect_recording` | Read a recording's length and audio / video streams | Untested through Claude. The same code read real Ecamm recordings correctly in tests |
+| `ecamm_read_markers` | Read the marker file Ecamm saves beside a recording | Untested through Claude. The layout comes from four marker files a real Ecamm wrote |
+| `ecamm_prepare_edit_handoff` | A receipt of which expected files are present | Untested through Claude |
 
 Things it handles so you don't have to:
 
@@ -203,6 +226,19 @@ Things it handles so you don't have to:
 - **Scene switches are confirmed.** It waits until Ecamm reports the new scene before saying it's done.
 - **Scene groups** are flattened and labeled `Group / Scene`.
 - **Waits for your Allow click.** The first request holds for up to 25 seconds while you click Allow, so you don't have to ask twice.
+
+## What Ecamm's API can't do
+
+This project can only do what Ecamm's Remote Control API offers. It does not offer these, so neither does this project. Requests for them are labeled `upstream-ecamm` and closed, because nothing here can fix them.
+
+- **Read live chat.** It can post a comment and show the latest one on screen. It cannot read comments.
+- **Send events.** Ecamm doesn't notify anyone when something changes. Nothing here reacts to your show on its own; it only acts when you ask.
+- **Create or edit scenes and overlays.** It can switch scenes, show and hide overlays, and change the text of an existing text overlay. It cannot build or rearrange them.
+- **Say for certain that you are live.** The only signal is the label on Ecamm's main button. `Finish` means live or recording; the API doesn't say which.
+- **Return the recording file's path.** The API never says where a recording was saved.
+- **See or hear your show.** It reads settings, not signals. A mic that is unmuted at 100 can still be silent.
+
+**Possible later, not promised.** Ecamm 4.6 added Shortcuts and AppleScript, including a "Broadcast Finishes" trigger that passes the recording's path. The advanced recording tools above experiment with that. It needs manual setup, has not fired from a real recording in our testing, and is not part of the supported core.
 
 ## Compatibility and limits
 
@@ -269,7 +305,7 @@ npm run package      # builds release/ecamm-mcp.mcpb and release/ecamm-mcp.cjs
 
 To identify a test package, run `node release/ecamm-mcp.cjs --build-info` or ask for recording status. Bundles report their source commit and whether relevant source files had local changes when packaged. Plain `tsc` builds and source archives without Git report unavailable provenance rather than guessing. This is a troubleshooting label, not a signature or security attestation. A development package can share the published version number; compare its commit when checking which fixes are installed.
 
-Releases: bump the version in `package.json`, `src/version.ts` and `mcpb/manifest.json`, then push a tag like `v0.2.0`. GitHub Actions builds the extension and the single-file server and attaches them to the release.
+Releases: bump the version in `package.json`, `src/version.ts` and `mcpb/manifest.json`, add a `CHANGELOG.md` entry and `docs/release-notes/vX.Y.Z.md`, then push a tag like `v0.3.0`. GitHub Actions builds the extension and the single-file server, writes `SHA256SUMS.txt`, and attaches all three to a **draft** release. Nothing is public until someone publishes that draft.
 
 </details>
 
@@ -277,11 +313,11 @@ Releases: bump the version in `package.json`, `src/version.ts` and `mcpb/manifes
 
 `npm test` runs unit tests plus an end-to-end run of the real MCP server against a fake Ecamm that reproduces the real response shapes, the toggle behavior, the scene-switch delay, the Allow flow, a relaunch on a new port, and loopback discovery. CI runs the same suite against the shipped bundle and runs `install.sh` on real Macs, with and without Node.js installed.
 
-Against a real Ecamm Live, on versions 0.1.1 through 0.2.3, including an unlisted YouTube test broadcast: discovery, the Allow dialog, status, the pre-show check, all lists, thumbnails (including from a phone), scene switch and step, overlays, mute, volume, sound effects, camera, source mode, preview mode, the Zoom panel, going live and ending, a public chat comment, the comment overlay, splitting the recording, and the dry-run guard on Go Live, profile switch and Zoom end. Not yet run against a real Ecamm: pausing a recording, audio filters and video playback. If something behaves differently on your setup, please open an issue. Also run against a real Ecamm, in Record Only mode on a development build: overlay text, record and end by intent (including that a repeated request does nothing and that go live is refused in Record Only mode), pause and resume, and the scene sheet with refresh. Not yet run against a real Ecamm: go live by intent in broadcast mode, the system-audio and Zoom-sharing names, and whether a marker now reaches the marker file. See the [handoff notes](docs/CLAUDE_HANDOFF.md) for the session record.
+What has and hasn't been run against a real Ecamm Live is in the last column of the tool tables above. The session records are in the [handoff notes](docs/CLAUDE_HANDOFF.md). The simulator is not Ecamm: a tool marked untested may behave differently on the real thing.
 
 ## Credits
 
-Development notes: [API and Stream Deck research](docs/RESEARCH.md) and [Codex / Claude handoff](docs/CLAUDE_HANDOFF.md). The API corrections, overlay text, the scene sheet, broadcast intent and command ordering are simulator-tested only; see the handoff for the real-Ecamm checks still to do.
+Development notes: [API and Stream Deck research](docs/RESEARCH.md) and [Codex / Claude handoff](docs/CLAUDE_HANDOFF.md). See the handoff for the real-Ecamm checks still to do.
 
 The scene sheet's label font is a bitmap rendered from DejaVu Sans Mono Bold, used under the DejaVu Fonts license. JPEG handling is jpeg-js (BSD-3-Clause).
 

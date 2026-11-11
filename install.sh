@@ -98,6 +98,17 @@ else
   say "Downloading ecamm-mcp..."
   curl -fsSL "https://github.com/$REPO/releases/latest/download/ecamm-mcp.cjs" -o "$NEW" ||
     die "Could not download ecamm-mcp from GitHub. Check your internet connection and try again."
+  # Releases from v0.3.0 on publish SHA256SUMS.txt. A mismatch stops the install.
+  # Older releases have no checksum file; say so and carry on.
+  if curl -fsSL "https://github.com/$REPO/releases/latest/download/SHA256SUMS.txt" -o "$TMP/SHA256SUMS.txt" 2>/dev/null; then
+    want="$(awk '$2 == "ecamm-mcp.cjs" || $2 == "*ecamm-mcp.cjs" {print $1}' "$TMP/SHA256SUMS.txt" | head -n 1)"
+    [ -n "$want" ] || die "The release's SHA256SUMS.txt has no entry for ecamm-mcp.cjs. Not installing."
+    got="$(sha256 "$NEW")"
+    [ "$got" = "$want" ] || die "The download did not match the release checksum. Not installing. Try again."
+    say "Checksum verified."
+  else
+    say "This release has no checksum file, so the download was not verified."
+  fi
 fi
 VERSION="$("$NODE" "$NEW" --version 2>/dev/null)" || die "The download looks broken. Try again."
 mv -f "$NEW" "$DIR/ecamm-mcp.cjs"

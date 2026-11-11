@@ -1,0 +1,62 @@
+name: Feature request
+description: Suggest something ecamm-mcp could do
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Community project, best effort. Not affiliated with Ecamm.
+        ecamm-mcp can only do what Ecamm's Remote Control API offers. It **cannot** read live chat, receive events from Ecamm, create or edit scenes, report for certain that you are live, or get the recording file's path from the API. Requests for those are labeled `upstream-ecamm` and closed, since nothing here can change them.
+        Every field below is required.
+  - type: textarea
+    id: want
+    attributes:
+      label: What do you want to do?
+      description: Describe the show situation, not the solution. What were you trying to get done?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps today
+      description: How you do it now, by hand or with a Stream Deck, and where ecamm-mcp falls short.
+    validations:
+      required: true
+  - type: textarea
+    id: doctor
+    attributes:
+      label: Doctor output
+      description: |
+        Terminal install: run `~/.ecamm-mcp/ecamm-mcp doctor` and paste what it prints.
+        Extension install: ask Claude "What's my Ecamm status?" and paste the full reply.
+      render: text
+    validations:
+      required: true
+  - type: input
+    id: ecamm
+    attributes:
+      label: Ecamm Live version
+      placeholder: "4.6.2"
+    validations:
+      required: true
+  - type: input
+    id: macos
+    attributes:
+      label: macOS version and Mac type
+      placeholder: "macOS 15.1, Apple silicon"
+    validations:
+      required: true
+  - type: input
+    id: client
+    attributes:
+      label: MCP client and version
+      placeholder: "Claude desktop 1.2.3, extension"
+    validations:
+      required: true
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before you submit
+      options:
+        - label: I read "What Ecamm's API can't do" in the README, and this isn't one of those.
+          required: true
