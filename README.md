@@ -174,6 +174,7 @@ Still stuck? [Open an issue](https://github.com/guycochran/ecamm-mcp/issues).
 | `ecamm_preflight` | Pre-show check: the problems Ecamm can see, what it couldn't read, and what it doesn't check |
 | `ecamm_plan_cue`, `ecamm_run_cue` | Check, then run, up to 12 ordinary steps in order. Cannot go live, record, end or post |
 | `ecamm_read_markers` | Read the marker file Ecamm saves beside a recording |
+| `ecamm_browse_recordings` | Browse file candidates in configured recording folders, even before the completion Shortcut is set up |
 | `ecamm_status` | Live or not, current scene, viewers, preview mode, mutes, volumes, Zoom state |
 | `ecamm_list_scenes`, `ecamm_list_overlays`, `ecamm_list` | Scenes, overlays in the current scene, cameras, videos, sounds, audio filters, profiles, destinations |
 | `ecamm_scene_sheet` | One labeled picture of every scene, plus a numbered list, from the thumbnails Ecamm already has. Changes nothing |

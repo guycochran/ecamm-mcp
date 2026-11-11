@@ -2,6 +2,12 @@
 
 Updated November 10, 2026 (America/Los_Angeles).
 
+## Codex recording-browser follow-up
+
+Added `ecamm_browse_recordings` so a person can find explicit file paths before the completion Shortcut works. Read-only, restricted to configured canonical roots, one directory at a time, alphabetically paged, maximum 5,000 scanned entries. Hidden entries/symlinks are skipped; offline roots are reported; outside paths are refused. Names are only media/sidecar candidates, not proof of Ecamm origin or completion. It does not create events or associate sessions/tracks. The completion-event listing retains its existing behavior.
+
+Validation: browser unit tests cover pagination, containment, outside symlinks, offline/multiple roots, and the 5,000-entry limit. MCP integration verifies browsing in read-only mode with no running Ecamm. The packaged recording/browser/Shortcut suites passed 11 tests before the additional scan-limit unit test; the scan-limit test then passed too. The archive verifier confirms **37 tools**. Previous full-suite result (208 tests) predates this additional tool; CI will validate the expanded full suite.
+
 ## Codex overnight setup pass, November 10, 2026
 
 Integrated Claude through `23dbe71`, including the split-marker evidence. Added `recording-shortcut`, a CLI that prints a configured POSIX shell action for Shortcuts. It validates folder/entry paths, fixes Node and server locations, quotes configuration safely, and passes the incoming recording path only through stdin. It does not install/enable a Shortcut or change Ecamm. Completion capture works without ffprobe; inspection still requires it.

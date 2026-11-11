@@ -47,7 +47,7 @@ try {
   // This must disable media access rather than treating it as a real path.
   await client.connect(new StdioClientTransport({ command: process.execPath, args, cwd: unpacked, env }))
   const { tools } = await client.listTools()
-  for (const name of ['ecamm_prepare_session', 'ecamm_recording_status', 'ecamm_list_recordings', 'ecamm_inspect_recording', 'ecamm_prepare_edit_handoff', 'ecamm_scene_sheet']) {
+  for (const name of ['ecamm_prepare_session', 'ecamm_recording_status', 'ecamm_browse_recordings', 'ecamm_list_recordings', 'ecamm_inspect_recording', 'ecamm_prepare_edit_handoff', 'ecamm_scene_sheet']) {
     assert(tools.some(tool => tool.name === name), `Packaged tool missing: ${name}`)
   }
   const call = async (name, args = {}) => {
