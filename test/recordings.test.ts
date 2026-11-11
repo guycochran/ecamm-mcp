@@ -191,3 +191,17 @@ describe('marker files, from the layout a real Ecamm 4.6.2 wrote', () => {
     expect(found.comments?.path).toContain('.srt')
   })
 })
+
+describe('markers in a split session (real Ecamm 4.6.2 files)', () => {
+  it('flags marker times later than the file is long', async () => {
+    const { parseMarkerFile, markersPastEnd } = await import('../src/recordings.js')
+    const { readFile } = await import('node:fs/promises')
+    const dir = new URL('./fixtures/', import.meta.url)
+    const part1 = parseMarkerFile(await readFile(new URL('ecamm-markers-4.6.2-paused-part1.txt', dir), 'utf8'))
+    const part2 = parseMarkerFile(await readFile(new URL('ecamm-markers-4.6.2-split-part2.txt', dir), 'utf8'))
+    expect(part1.format).toBe('ecamm-markers-v1')
+    expect(markersPastEnd(part1.markers, 33.2)).toBe(0) // first file was 33.2 s long
+    expect(markersPastEnd(part2.markers, 17.6)).toBe(1) // second file was 17.6 s; marker says 47 s
+    expect(markersPastEnd(part2.markers, undefined)).toBe(0)
+  })
+})

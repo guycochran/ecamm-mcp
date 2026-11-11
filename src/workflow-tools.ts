@@ -83,7 +83,7 @@ export function registerWorkflowTools(server: McpServer, client: EcammClient) {
     inputSchema: { path: z.string().min(1).max(4096) }, annotations,
   }, safe(async ({ path }) => inspectRecording(path, recordingOptions())))
   server.registerTool('ecamm_read_markers', {
-    description: 'Read the marker file Ecamm saves beside a recording (same name, .txt) and return each marker with its time and text. Requires the recording folder to be configured. Read-only. Understands the layout Ecamm 4.6.2 writes; any other layout is reported as unrecognized, not guessed at. Marker times across a pause or split are unverified.',
+    description: 'Read the marker file Ecamm saves beside a recording (same name, .txt) and return each marker with its time and text. Requires the recording folder to be configured. Read-only. Understands the layout Ecamm 4.6.2 writes; any other layout is reported as unrecognized, not guessed at. Times count recorded time (a pause adds nothing). In the later file of a split session they carry on from the earlier part and are not offsets into that file; this was seen once and no correction is applied.',
     inputSchema: { path: z.string().min(1).max(4096) }, annotations,
   }, safe(async ({ path }) => readMarkers(path, recordingOptions())))
   server.registerTool('ecamm_prepare_edit_handoff', {

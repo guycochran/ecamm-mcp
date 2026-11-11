@@ -2,6 +2,32 @@
 
 Updated November 10, 2026 (America/Los_Angeles).
 
+## Claude update 3, November 10, 2026 (11:15 PM Pacific)
+
+Real Ecamm 4.6.2, iMac Pro, Record Only, test build of `0b151e9`. One session, 11:06 PM.
+
+| Check | Result |
+| --- | --- |
+| New preflight, intent record | `no_problems_seen`, destination "not needed", `notChecked` listed |
+| `record`, then `record` again | Verified; second call clicked nothing |
+| `ecamm_plan_cue` then `ecamm_run_cue`, 7 steps while recording (hide overlay, scene, wait 4 s, scene back, show overlay, mic 90, mic 100) | Plan ok; 7 of 7 verified |
+| Pause, resume | Verified by button label |
+| Split (`new_file`) | Accepted. A second file was written |
+| `end` | Verified ended |
+| `ecamm_recording_status` | No folders, ffprobe unavailable, inbox not created. `which ffprobe` on the Mac: not found. ffprobe is not installed |
+
+Files: part 1 `...at 23.06.11.mov` 33.2 s, part 2 `...at 23.07.10.mov` 17.6 s (ffprobe on Linux). Each has its own `.txt`.
+
+Marker files (copies in `test/fixtures`):
+- Part 1: `Start` 0:00, A 0:09, B (dropped about 12 s into a pause) 0:25, C (just after resume) 0:30.
+- Part 2: `Start` 0:00, D 0:47, in a file 17.6 s long.
+
+Interpretation, from this one session: marker times count recorded time, so a pause adds nothing and a marker dropped while paused gets the pause point. Wall time from start to split was 59 s against 33.2 s recorded. After a split the new file gets its own `Start` at 0:00 but later markers carry on from the session's recorded time, not from the new file's start (47 s is about 33 s of part 1 plus about 14 s). Not confirmed against the picture.
+
+Code: `markersPastEnd`; the handoff receipt now reports marker times later than the file is long and applies no correction. Limitation text updated. 188 tests pass.
+
+Still owed: ffprobe install and folder settings on the Mac, the Shortcut and its completion events (including what a split produces), separate tracks, guest controls.
+
 ## Claude update 2, November 10, 2026 (about 11 PM Pacific)
 
 Branch `claude/broadcast-intent` now also contains `codex/ecamm-recording-workflows` (#10, head `e7b2330`), merged cleanly onto `b62ec15` as `e30f6e1`. Both registrars and the `recording-complete` / `recording-doctor` CLI routing are intact, as are the mutation queue, getInfo pacing, the scene sheet and explicit intent. Not merged to main, not tagged, not released.

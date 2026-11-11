@@ -178,9 +178,15 @@ export function parseMarkerFile(text: string): { format: 'ecamm-markers-v1' | 'u
 }
 
 const MARKER_LIMITS = [
-  'Times are as Ecamm wrote them, counted from the start of the recording this file sits beside.',
-  'How marker times behave across a pause, or after a split into a new file, has not been verified. Check one against the picture before relying on them for an edit.',
+  'Times are as Ecamm wrote them. In one real recording (Ecamm 4.6.2) they counted recorded time, so a pause did not add to them, and a marker dropped while paused got the time of the pause.',
+  'After a split into a new file, the new file\'s marker times did not restart at zero in that one recording: they carried on from the earlier part. Such a time is later than the file is long. Check one marker against the picture before relying on them for an edit.',
 ]
+
+/** Markers timed later than the recording is long. Seen in the second file of a split session. */
+export function markersPastEnd(markers: { seconds: number }[], durationSeconds: number | undefined): number {
+  if (!durationSeconds) return 0
+  return markers.filter((m) => m.seconds > durationSeconds + 1).length
+}
 
 /** Read a marker file inside the configured recording folders. Never writes. */
 export async function readMarkers(path: string, opts: RecordingOptions) {
@@ -247,6 +253,8 @@ export async function prepareHandoff(eventIdValue: string, assets: ExpectedAsset
     } catch (err) { result.push({ ...asset, status: 'unavailable', detail: err instanceof Error ? err.message : String(err) }) }
   }
   const sidecars = await sidecarsOf(main.path, opts)
+  const past = sidecars.markers ? markersPastEnd(sidecars.markers.markers, main.durationSeconds) : 0
+  if (past) sidecars.problems.push(`${past} marker time(s) are later than this recording is long. This file is probably a later part of a split session and its marker times carry on from the earlier part. They are not offsets into this file; no correction was applied.`)
   return {
     version: 1, event, main, assets: result, sidecars,
     assessment: main.status === 'changing' || !main.hasVideo || !main.hasAudio || !main.durationSeconds || result.some(a => a.status !== 'metadata_checked')
