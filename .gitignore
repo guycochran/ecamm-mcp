@@ -3,3 +3,7 @@ dist
 release
 *.mcpb
 *.tgz
+
+# Local recordings stay on this Mac
+/recordings/
+/.local/

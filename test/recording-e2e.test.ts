@@ -43,6 +43,16 @@ describe('completion helper and MCP integration without a running Ecamm', () => 
     const result = JSON.parse((r.content as { text: string }[])[0].text)
     expect(result).toMatchObject({ metadataInspectionConfigured: true, completionHook: 'not_verified', inspector: { status: 'available' } })
   })
+  it('browses local candidates over MCP without a completion event or production access', async () => {
+    const r = await client.callTool({ name: 'ecamm_browse_recordings', arguments: {} })
+    expect(r.isError).not.toBe(true)
+    const result = JSON.parse((r.content as { text: string }[])[0].text)
+    expect(result.entries).toHaveLength(1)
+    expect(result.entries[0]).toMatchObject({ name: 'Renée $(never execute).mp4', kind: 'media_candidate' })
+    expect(result.note).toContain('do not establish')
+    const outside = await client.callTool({ name: 'ecamm_browse_recordings', arguments: { folder: directory } })
+    expect(outside.isError).toBe(true)
+  })
   it('round-trips stdin, durable events, metadata inspection and handoff in read-only mode', async () => {
     const completed = await complete(JSON.stringify({ path: movie }))
     expect(completed.code).toBe(0)

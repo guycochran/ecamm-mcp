@@ -44,6 +44,22 @@ It takes one absolute recording path through standard input, as plain text. It n
 
 The helper must receive the same recording-folder configuration as the MCP server. Desktop extension settings do not automatically become environment variables in Shortcuts.
 
+### Generate the shell action
+
+With the recording environment configured, run `ecamm-mcp recording-shortcut` (or `node /absolute/path/to/server recording-shortcut`). It prints a complete shell action with the current recording folders, inbox, Node executable, and MCP entry point fixed to absolute paths. Copy that output into Shortcuts' **Run Shell Script**, choosing **Pass Input: to stdin**. The incoming recording path must not be inserted into the script text.
+
+This command only prints text: it does not install a Shortcut, change Ecamm settings, open media, or create a completion event. It checks that recording folders and the local entry point exist. Completion capture does **not** require ffprobe; later media inspection does. Regenerate the action after moving the MCP installation or changing the recording folders or inbox. Keep the server files at that location for the helper to work when chats are closed.
+
+For example, to generate from the development bundle:
+
+```sh
+ECAMM_RECORDING_FOLDER='/absolute/path/to/recordings' \
+ECAMM_FFPROBE='/absolute/path/to/ffprobe' \
+node /absolute/path/to/ecamm-mcp.cjs recording-shortcut
+```
+
+The folder must already exist. Use the same values saved in your desktop extension. The generated action explicitly sets its allowed folders, so unrelated environment settings cannot silently redirect them.
+
 Suggested manual Shortcut setup (requires real-Ecamm acceptance testing):
 
 1. Create a Shortcut that accepts the file path supplied by Ecamm's **Broadcast Finishes** event.
@@ -64,6 +80,8 @@ Ecamm documents the event's recording path, but split-file and Dual Mode behavio
 ## Inspect and hand off
 
 Start with `ecamm_recording_status` (or `node /absolute/path/to/server recording-doctor` in the helper's environment). It checks recording-folder availability, inbox location, and whether the configured executable identifies as ffprobe. It opens no recordings and creates no files. It deliberately reports the completion hook as unverified: only a real event can test that. Desktop settings and Shortcut environment must agree.
+
+If the completion Shortcut is not set up yet, ask **“Show me the files in my recording folder.”** `ecamm_browse_recordings` lists media and sidecar file candidates plus subfolders, alphabetically. With several configured folders, it first asks you to choose one. Browse a returned subfolder path or use `nextOffset` for the next page. It skips hidden entries and symlinks, checks containment within the configured folders, and refuses directories exceeding 5,000 entries. Unavailable configured folders are reported. A file listing does not prove that files are from Ecamm, finished, or part of the same session; the assistant must not pick the newest file as a substitute for a completion event. You can inspect a chosen file explicitly without the Shortcut. A completion-based edit receipt still requires a saved event.
 
 1. `ecamm_list_recordings`: lists saved completion notifications. No recording-folder scan or newest-file guess.
 2. `ecamm_inspect_recording`: reads metadata for an explicit allowed path. Reports duration, dimensions when available, audio/video stream presence, and whether the file changed during inspection.

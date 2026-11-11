@@ -47,7 +47,7 @@ try {
   // This must disable media access rather than treating it as a real path.
   await client.connect(new StdioClientTransport({ command: process.execPath, args, cwd: unpacked, env }))
   const { tools } = await client.listTools()
-  for (const name of ['ecamm_prepare_session', 'ecamm_recording_status', 'ecamm_list_recordings', 'ecamm_inspect_recording', 'ecamm_prepare_edit_handoff', 'ecamm_scene_sheet']) {
+  for (const name of ['ecamm_prepare_session', 'ecamm_recording_status', 'ecamm_browse_recordings', 'ecamm_list_recordings', 'ecamm_inspect_recording', 'ecamm_prepare_edit_handoff', 'ecamm_scene_sheet']) {
     assert(tools.some(tool => tool.name === name), `Packaged tool missing: ${name}`)
   }
   const call = async (name, args = {}) => {
@@ -64,10 +64,20 @@ try {
     env: { ...env, ECAMM_RECORDING_FOLDER: media }, input: movie + '\n', encoding: 'utf8', timeout: 10000,
   }))
   assert.equal(notification.duplicate, false)
+  const action = execFileSync(process.execPath, [entry, 'recording-shortcut'], {
+    env: { ...env, ECAMM_RECORDING_FOLDER: media }, encoding: 'utf8', timeout: 10000,
+  })
+  const helper = join(temp, 'completion.sh')
+  await writeFile(helper, action)
+  const repeated = JSON.parse(execFileSync('/bin/sh', [helper], {
+    env: { ...process.env, ECAMM_RECORDING_ROOTS: '["/wrong"]' }, input: movie + '\n', encoding: 'utf8', timeout: 10000,
+  }))
+  assert.equal(repeated.eventId, notification.eventId)
+  assert.equal(repeated.duplicate, true)
   const listed = await call('ecamm_list_recordings')
   assert.equal(listed.events[0].id, notification.eventId)
   assert.equal(await readFile(movie, 'utf8'), 'notification fixture, not media')
-  console.log(`Desktop archive verified: version ${manifest.version}, ${tools.length} tools, optional settings, completion helper, and MCP receipt listing.`)
+  console.log(`Desktop archive verified: version ${manifest.version}, ${tools.length} tools, optional settings, generated Shortcut action, completion helper, and MCP receipt listing.`)
 } finally {
   await client.close()
   await rm(temp, { recursive: true, force: true })

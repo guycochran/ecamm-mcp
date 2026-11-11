@@ -2,6 +2,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { z } from 'zod'
 import { type EcammClient, scalar } from './client.js'
 import { inspectRecording, listRecordings, prepareHandoff, readMarkers, recordingDoctor, recordingOptions } from './recordings.js'
+import { browseRecordings } from './recording-browser.js'
 
 const intentSchema = z.enum(['record_only', 'stream_and_record', 'stream_only', 'present'])
 export type SessionIntent = z.infer<typeof intentSchema>
@@ -78,6 +79,10 @@ export function registerWorkflowTools(server: McpServer, client: EcammClient) {
     description: 'List local recording-completion notifications saved by the optional Shortcut helper. Does not scan for or guess the newest recording, and does not verify files.',
     inputSchema: { limit: z.number().int().min(1).max(100).default(20) }, annotations,
   }, safe(async ({ limit }) => listRecordings(recordingOptions(), limit)))
+  server.registerTool('ecamm_browse_recordings', {
+    description: 'Browse file names in a configured local recording folder without the completion Shortcut. Lists media/sidecar candidates and subfolders alphabetically, not completed recordings. Does not open media, infer session/track relationships, choose the newest file, or create notifications. Supply a returned folder path to navigate; limited to configured recording folders.',
+    inputSchema: { folder: z.string().min(1).max(4096).optional(), limit: z.number().int().min(1).max(100).default(50), offset: z.number().int().min(0).max(5000).default(0) }, annotations,
+  }, safe(async ({ folder, limit, offset }) => browseRecordings(recordingOptions(), folder, limit, offset)))
   server.registerTool('ecamm_inspect_recording', {
     description: 'Inspect local recording metadata without changing the file. Requires configured ECAMM_RECORDING_ROOTS and ffprobe. Reports audio/video stream presence, not audible speech or finalization. Paths belong to this MCP Mac, not a remote Ecamm Mac.',
     inputSchema: { path: z.string().min(1).max(4096) }, annotations,
