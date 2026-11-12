@@ -512,4 +512,17 @@ describe('getInfo pacing and the mutation queue', () => {
     expect(order).toEqual(['slow', 'patient'])
     fake.server.close()
   })
+  it('warns when the stated intent does not match the mode the button shows', () => {
+    const base = { Mute: 'no', AudioLevels: [], CurrentScene: 'x' }
+    const recordInBroadcast = preflight({ info: { ...base, ButtonLabel: 'New' } as never, sceneTitle: 'A', intent: 'record' })
+    expect(recordInBroadcast.checks.find((c) => c.check === 'Mode')?.status).toBe('warn')
+    expect(recordInBroadcast.verdict).toBe('problems_found')
+    const liveInRecordOnly = preflight({ info: { ...base, ButtonLabel: 'Record' } as never, sceneTitle: 'A', intent: 'go_live' })
+    expect(liveInRecordOnly.checks.find((c) => c.check === 'Mode')?.status).toBe('warn')
+    const matching = preflight({ info: { ...base, ButtonLabel: 'Record' } as never, sceneTitle: 'A', intent: 'record' })
+    expect(matching.checks.find((c) => c.check === 'Mode')).toBeUndefined()
+    const inferred = preflight({ info: { ...base, ButtonLabel: 'New' } as never, sceneTitle: 'A' })
+    expect(inferred.checks.find((c) => c.check === 'Mode')).toBeUndefined()
+  })
+
 })

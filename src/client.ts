@@ -258,6 +258,13 @@ export function preflight(input: PreflightInput): PreflightResult {
   const intent: PreflightResult['intent'] = input.intent
     ?? (state !== 'idle' ? 'unknown' : /^record$/i.test(button) ? 'record' : 'go_live')
 
+  // The idle label says which mode Ecamm is in. Asking to record in broadcast mode, or to go
+  // live in Record Only mode, is refused by ecamm_start_stop, so say so here first.
+  if (state === 'idle' && input.intent === 'record' && !/^record$/i.test(button))
+    add('Mode', 'warn', `You asked about recording, but the main button reads "${button}", which means Ecamm is set to broadcast. A record request would be refused. Switch Ecamm to Record Only in its Mode menu, or go live instead.`)
+  else if (state === 'idle' && input.intent === 'go_live' && /^record$/i.test(button))
+    add('Mode', 'warn', `You asked about going live, but the main button reads "${button}", which means Ecamm is in Record Only mode. A go-live request would be refused. Switch Ecamm to a streaming mode in its Mode menu, or record instead.`)
+
   if (input.sceneTitle) add('Scene', 'ok', `On "${input.sceneTitle}"${input.sourceMode ? ` (source: ${input.sourceMode})` : ''}.`)
   else add('Scene', 'unknown', 'Could not read the current scene.')
 
