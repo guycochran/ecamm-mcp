@@ -1,5 +1,11 @@
 # ecamm-mcp
 
+> **Unmaintained / as-is.** This is a community project I built as a proof of concept. It is **not made by, endorsed by, or affiliated with Ecamm Network.** I am not able to provide support, fixes, or live-show help. The software is provided as-is under the MIT License, without warranty.
+>
+> If something breaks after an Ecamm update, please fork it or take over maintenance. Pull requests may stay open unreviewed. Please do not contact Ecamm about this project.
+
+**Known risks.** Go-live/end detection relies on English button labels, so non-English Ecamm or future updates can break it. A "go live" request to Claude can start a stream with no second OS prompt.
+
 Run **Ecamm Live** from a chat with Claude. Type what you want in plain words and it happens.
 
 "Am I ready to go live?" "Switch to my guest scene." "Show the lower third." "Drop a marker called Q&A."
@@ -100,7 +106,7 @@ Want Claude to look but not touch during a show? Turn on read-only mode: in the 
 
 ## Something's not working
 
-Terminal install: run this and read the output. Paste it when you ask for help.
+Terminal install: run this and read the output.
 
 ```bash
 ~/.ecamm-mcp/ecamm-mcp doctor
@@ -119,7 +125,7 @@ To set it up again without reinstalling: `~/.ecamm-mcp/ecamm-mcp setup`
 
 To remove the Terminal install: `~/.ecamm-mcp/ecamm-mcp uninstall`, then delete the `~/.ecamm-mcp` folder.
 
-Still stuck? [Open an issue](https://github.com/guycochran/ecamm-mcp/issues).
+This repo is unmaintained. Please do not file support issues. You are welcome to fork the code.
 
 ## What it can do
 
@@ -216,7 +222,7 @@ Releases: bump the version in `package.json`, `src/version.ts` and `mcpb/manifes
 
 `npm test` runs unit tests plus an end-to-end run of the real MCP server against a fake Ecamm that reproduces the real response shapes, the toggle behavior, the scene-switch delay, the Allow flow, a relaunch on a new port, and loopback discovery. CI runs the same suite against the shipped bundle and runs `install.sh` on real Macs, with and without Node.js installed.
 
-Against a real Ecamm Live so far, including an unlisted YouTube test broadcast: discovery, the Allow dialog, status, the pre-show check, all lists, thumbnails, scene switch and step, overlays, mute, volume, sound effects, camera, source mode, preview mode, the Zoom panel, going live and ending, a public chat comment, the comment overlay, splitting the recording, and the dry-run guard on Go Live, profile switch and Zoom end. Not yet run against a real Ecamm: pausing a recording, audio filters and video playback. If something behaves differently on your setup, please open an issue.
+Against a real Ecamm Live so far, including an unlisted YouTube test broadcast: discovery, the Allow dialog, status, the pre-show check, all lists, thumbnails, scene switch and step, overlays, mute, volume, sound effects, camera, source mode, preview mode, the Zoom panel, going live and ending, a public chat comment, the comment overlay, splitting the recording, and the dry-run guard on Go Live, profile switch and Zoom end. Not yet run against a real Ecamm: pausing a recording, audio filters and video playback. This repo is unmaintained. Please do not file support issues. You are welcome to fork the code.
 
 ## Credits
 
